@@ -11,7 +11,7 @@ class OPTCTRL(Controller):
     cSamples = None
     userSamples = None
     
-    def __init__(self, period, init_cores, stime, min_cores, max_cores, st=0.8):
+    def __init__(self, period, init_cores, min_cores, max_cores, st=0.8,stime=None):
         super().__init__(period, init_cores, min_cores, max_cores, st)
         if(not isinstance(stime, list)):
             self.stime = [stime]

@@ -23,14 +23,13 @@
         }
     },
     "controller" : {
-        "class" : "CTControllerScaleX",
+        "class" : "OPTCTRL",
         "params" : {
+         stime, min_cores, max_cores, st=0.8
             "period" : 1, 
             "init_cores" : 1, 
             "min_cores" : 0.1,
             "max_cores" : 20,
-            "BC" : 25, 
-            "DC" : 50, 
             "st" :0.8
         }
         
