@@ -23,7 +23,7 @@
         }
     },
     "controller" : {
-        "class" : "CTControllerScaleX",
+        "class" : "OPTCTRL",
         "params" : {
             "period" : 1, 
             "init_cores" : 1, 
