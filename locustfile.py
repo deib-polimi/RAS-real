@@ -24,8 +24,8 @@ monitoring.reset()
 controller.setMonitoring(monitoring)
 controller.setGenerator(generator)
 controller.setSLA(appSla)
-
-request_maker.setup(monitoring, controller)
+request = data["request"]
+request_maker.setup(monitoring, controller, request["method"], request["headers"], request["data"], request["path"])
 controller_loop.setup(controller, data["containerId"])
 printer.setup(monitoring, generator, controller, EXP_FILE.split("/")[-1].replace(".json", ""))
 

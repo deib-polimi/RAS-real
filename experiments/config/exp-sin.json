@@ -1,5 +1,11 @@
 {
     "host" : "http://localhost:80",
+    "request" : {
+        "method" : "GET",
+        "data" : {},
+        "headers" : {},
+        "path" : "/"
+    },
     "containerId" : "ae500650c24c",
     "monitoring_window": 1,
     "app_sla": 0.4,

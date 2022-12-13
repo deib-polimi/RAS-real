@@ -5,7 +5,10 @@ from locust.runners import WorkerRunner
 env = None
 monitoring = None 
 controller = None
-
+method = None
+data = None 
+headers = None
+path = None 
 
 @events.init.add_listener
 def on_locust_init(environment, **_kwargs):
@@ -13,15 +16,23 @@ def on_locust_init(environment, **_kwargs):
     if not isinstance(environment.runner, WorkerRunner):
         env = environment
 
-def setup(_monitoring, _controller):
-    global monitoring, controller
+def setup(_monitoring, _controller, _method, _headers, _data, _path):
+    global monitoring, controller, method, data, path, headers
     monitoring = _monitoring
     controller = _controller
+    method = _method
+    data = _data
+    path = _path
+    headers = _headers
 
 def run(task):
     start = time.time()
-    task.client.get("")
+    if method == "GET":
+        task.client.get("")
+    elif method == "POST":
+        task.client.post(path, json=data, headers=headers)
     end = time.time()
+
     rt = end - start
     t = env.shape_class.get_run_time()
     users = env.runner.user_count

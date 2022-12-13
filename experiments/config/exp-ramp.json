@@ -1,6 +1,13 @@
 {
-    "host" : "http://localhost:80",
-    "containerId" : "ae500650c24c",
+
+    "host" : "http://localhost:8080",
+    "request" : {
+        "method" : "POST",
+        "data" : { "username": "dragonbanana", "random_len": 80000},
+        "headers" : {"Content-Type": "application/json"},
+        "path" : "/function/dynamic_html"
+    },
+    "containerId" : "c8cd77bf02e1",
     "monitoring_window": 1,
     "app_sla": 0.4,
     "wait_time_min": 1,
@@ -10,8 +17,8 @@
     "generator" : {
         "class" : "RampGen",
         "params" : {
-            "slope": 3,
-            "steady" : 50,
+            "slope": 0.5,
+            "steady" : 20,
             "initial" : 1
         }
     },
@@ -22,8 +29,8 @@
             "init_cores" : 1, 
             "min_cores" : 0.1,
             "max_cores" : 8,
-            "BC" : 0.5, 
-            "DC" : 0.95, 
+            "BC" : 25, 
+            "DC" : 50, 
             "st" :0.8
         }
         
