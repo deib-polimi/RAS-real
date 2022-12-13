@@ -1,0 +1,42 @@
+from .controller import Controller
+
+
+class RBController(Controller):
+    def __init__(self, period, init_cores, min_cores, max_cores, step=1, l=0.5, h=0.9):
+        super().__init__(period, init_cores, min_cores, max_cores)
+        self.l = l
+        self.h = h
+        self.step = step
+
+    def control(self, t):
+        rt = self.monitoring.getRT()
+        if rt < self.l*self.sla:
+            self.cores = max(1, self.cores-self.step)
+        elif rt > self.h*self.sla:
+            self.cores += self.step
+        self.cores = max(min(self.cores, self.max_cores), self.min_cores)
+
+    def __str__(self):
+        return super().__str__() + " step: %.2f, l: %.2f h: %.2f " % (self.step, self.l, self.h)
+
+
+class RBControllerWithCooldown(RBController):
+    def __init__(self, period, init_cores, step=1, l=0.5, h=0.9, cooldown=60):
+        super().__init__(period, init_cores, step, l, h)
+        self.cooldown = cooldown
+
+    def reset(self):
+        super().reset()
+        self.nextAction = -1
+
+    def control(self, t):
+        print("cores", self.cores)
+        if t > self.nextAction:
+            print("action")
+            cores = self.cores
+            super().control(t)
+            if cores != self.cores:
+                self.nextAction = t + self.cooldown
+
+    def __str__(self):
+        return super().__str__() + " cooldown: %d" % (self.cooldown,)
