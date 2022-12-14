@@ -11,7 +11,7 @@
     "app_sla": 0.4,
     "wait_time_min": 1,
     "wait_time_max": 1,
-    "spawn_rate": 1,
+    "spawn_rate": 10,
     "end" : 600,
     "generator" : {
         "class" : "SinGen",
