@@ -15,11 +15,11 @@
     "spawn_rate": 10,
     "end" : 300,
     "generator" : {
-        "class" : "RampGen",
+        "class" : "SinGen",
         "params" : {
-            "slope": 0.5,
-            "steady" : 120,
-            "initial" : 1
+        	"period":300,
+            "mod":30,
+            "shift":42
         }
     },
     "controller" : {

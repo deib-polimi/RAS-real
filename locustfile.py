@@ -10,7 +10,7 @@ from locust import events
 from locust.runners import WorkerRunner
 
 
-EXP_FILE = "experiments/config/exp-ramp_qn.json"
+EXP_FILE = "experiments/config/exp-sin_qn.json"
 
 with open(EXP_FILE) as f:
     data = json.load(f)
