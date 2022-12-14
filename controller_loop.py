@@ -25,7 +25,7 @@ def on_locust_start(environment, **_kwargs):
 
 def controller_loop(environment):
     shape = environment.shape_class
-    sleep(0.5) # wait for some requests to be executed...
+    sleep(1) # wait for some requests to be executed...
     while not end:
         t = shape.get_run_time()
         cores = controller.tick(t)
