@@ -6,12 +6,12 @@
         "headers" : {},
         "path" : "/"
     },
-    "containerId" : "9d1feeef6391",
+    "containerId" : "51c7a938c1af",
     "monitoring_window": 1,
     "app_sla": 0.4,
     "wait_time_min": 1,
     "wait_time_max": 1,
-    "spawn_rate": 10,
+    "spawn_rate": 1,
     "end" : 600,
     "generator" : {
         "class" : "SinGen",
