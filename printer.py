@@ -32,7 +32,7 @@ def saveMat():
 
     for (rts, cores, violations) in zip(arts, acores, aviolations):
         mdic = {"rts": rts,"cores":cores,"violations":violations}    
-        savemat("%s_%s.mat"%(controller.name,generator.name), mdic)
+        savemat("%s%s_%s.mat"%(output_path,controller.name,generator.name), mdic)
 
 def log():
         arts = array(monitoring.getAllRTs())
