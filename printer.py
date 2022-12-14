@@ -1,4 +1,5 @@
 from numpy import array
+from scipy.io import savemat
 import matplotlib.pyplot as plt
 
 from locust import events
@@ -17,6 +18,21 @@ def on_locust_stop(environment, **_kwargs):
         with open(f"{output_path}{name}.tex", "w") as f:
            f.write(log())
         plot()
+        saveMat()
+        
+
+def saveMat():
+    arts = array(monitoring.getAllRTs())
+    acores = array(monitoring.getAllCores())
+    aviolations = monitoring.getViolations()
+    if not isinstance(aviolations, list):
+        arts = [arts]
+        acores = [acores]
+        aviolations = [aviolations]
+
+    for (rts, cores, violations) in zip(arts, acores, aviolations):
+        mdic = {"rts": rts,"cores":cores,"violations":violations}    
+        savemat("%s_%s.mat"%(controller.name,generator.name), mdic)
 
 def log():
         arts = array(monitoring.getAllRTs())

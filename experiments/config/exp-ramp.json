@@ -18,7 +18,7 @@
         "class" : "RampGen",
         "params" : {
             "slope": 0.5,
-            "steady" : 150,
+            "steady" : 120,
             "initial" : 1
         }
     },
