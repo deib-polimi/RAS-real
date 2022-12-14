@@ -1,10 +1,10 @@
 {
-    "host" : "http://localhost:80",
+    "host" : "http://localhost:8080",
     "request" : {
-        "method" : "GET",
-        "data" : {},
-        "headers" : {},
-        "path" : "/"
+        "method" : "POST",
+        "data" : { "username": "dragonbanana", "random_len": 80000},
+        "headers" : {"Content-Type": "application/json"},
+        "path" : "/function/dynamic_html"
     },
     "containerId" : "51c7a938c1af",
     "monitoring_window": 1,
