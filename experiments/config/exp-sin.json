@@ -6,7 +6,7 @@
         "headers" : {},
         "path" : "/"
     },
-    "containerId" : "ae500650c24c",
+    "containerId" : "9d1feeef6391",
     "monitoring_window": 1,
     "app_sla": 0.4,
     "wait_time_min": 1,
