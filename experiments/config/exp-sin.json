@@ -12,13 +12,13 @@
     "wait_time_min": 1,
     "wait_time_max": 1,
     "spawn_rate": 10,
-    "end" : 100,
+    "end" : 600,
     "generator" : {
         "class" : "SinGen",
         "params" : {
-            "mod": 50,
-            "shift" : 70,
-            "period" : 20
+        	"period":300,
+            "mod":30,
+            "shift":42
         }
     },
     "controller" : {
@@ -27,9 +27,7 @@
             "period" : 1, 
             "init_cores" : 1, 
             "min_cores" : 0.1,
-            "max_cores" : 8,
-            "BC" : 0.5, 
-            "DC" : 0.95, 
+            "max_cores" : 30,
             "st" :0.8
         }
         
