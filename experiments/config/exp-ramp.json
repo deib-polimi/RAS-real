@@ -7,7 +7,7 @@
         "headers" : {"Content-Type": "application/json"},
         "path" : "/function/dynamic_html"
     },
-    "containerId" : "51c7a938c1af",
+    "containerId" : "296d96102c25",
     "monitoring_window": 1,
     "app_sla": 0.4,
     "wait_time_min": 1,
