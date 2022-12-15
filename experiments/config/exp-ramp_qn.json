@@ -12,7 +12,7 @@
     "app_sla": 0.4,
     "wait_time_min": 1,
     "wait_time_max": 1,
-    "spawn_rate": 1,
+    "spawn_rate": 6,
     "end" : 100,
     "generator" : {
         "class" : "RampGen",
