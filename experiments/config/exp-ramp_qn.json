@@ -7,7 +7,7 @@
         "headers" : {"Content-Type": "application/json"},
         "path" : "/function/graph_bfs"
     },
-    "containerId" : "962ce7783c65",
+    "containerId" : "1cadd160a53c",
     "monitoring_window": 1,
     "app_sla": 0.4,
     "wait_time_min": 1,
