@@ -3,7 +3,9 @@
     "host" : "http://localhost:8079",
     "request" : {
         "method" : "GET",
-        "path" : "/"
+        "path" : "/",
+        "headers" : {},
+        "data" : {}
     },
     "containerId" : "459c32cc8851",
     "monitoring_window": 3,
