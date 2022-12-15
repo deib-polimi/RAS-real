@@ -7,7 +7,7 @@
         "headers" : {"Content-Type": "application/json"},
         "path" : "/function/dynamic_html"
     },
-    "containerId" : "97d051068e8d",
+    "containerId" : "25aafb119ae1",
     "monitoring_window": 3,
     "app_sla": 0.4,
     "wait_time_min": 1,
@@ -17,7 +17,7 @@
     "generator" : {
         "class" : "RampGen",
         "params" : {
-            "slope": 1,
+            "slope": 3,
             "steady" : 50,
             "initial" : 1
         }

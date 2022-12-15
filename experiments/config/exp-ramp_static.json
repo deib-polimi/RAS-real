@@ -3,11 +3,16 @@
     "host" : "http://localhost:8080",
     "request" : {
         "method" : "POST",
-        "data" : { "username": "dragonbanana", "random_len": 1},
+        "data" : { 
+            "url": "https://sample-videos.com/img/Sample-jpg-image-50kb.jpg", 
+            "width": 10, 
+            "height": 10, 
+            "n": 30000
+        },
         "headers" : {"Content-Type": "application/json"},
-        "path" : "/function/dynamic_html"
+        "path" : "/function/'thumbnailer'"
     },
-    "containerId" : "add164a7bda5",
+    "containerId" : "25aafb119ae1",
     "monitoring_window": 3,
     "app_sla": 0.4,
     "wait_time_min": 1,
@@ -26,7 +31,7 @@
         "class" : "StaticController",
         "params" : {
             "period" : 1, 
-            "init_cores" : 0.5, 
+            "init_cores" : 2, 
             "min_cores" : 0.1,
             "max_cores" : 8
         }
