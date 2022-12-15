@@ -19,7 +19,7 @@
         "params" : {
             "slope": 0,
             "steady" : 0,
-            "initial" : 2
+            "initial" : 8
         }
     },
     "controller" : {
@@ -27,8 +27,8 @@
         "params" : {
             "period" : 1, 
             "init_cores" : 2, 
-            "min_cores" : 2,
-            "max_cores" : 2,
+            "min_cores" : 8,
+            "max_cores" : 8,
             "st" :0.8
         }
         
