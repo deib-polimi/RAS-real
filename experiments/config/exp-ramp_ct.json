@@ -19,7 +19,7 @@
         "params" : {
             "slope": 6,
             "steady" : 50,
-            "initial" : 0
+            "initial" : 1
         }
     },
     "controller" : {
