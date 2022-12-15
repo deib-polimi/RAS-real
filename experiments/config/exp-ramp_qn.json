@@ -19,16 +19,16 @@
         "params" : {
             "slope": 0,
             "steady" : 0,
-            "initial" : 8
+            "initial" : 10
         }
     },
     "controller" : {
         "class" : "OPTCTRL",
         "params" : {
             "period" : 1, 
-            "init_cores" : 8, 
-            "min_cores" : 8,
-            "max_cores" : 8,
+            "init_cores" : 10, 
+            "min_cores" : 10,
+            "max_cores" : 10,
             "st" :0.8
         }
         
