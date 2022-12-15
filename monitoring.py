@@ -38,6 +38,9 @@ class Monitoring:
         return self.allUsers
     def getAllCores(self):
         return self.allCores
+    def getAllTimes(self):
+        return self.time
+        
     def reset(self):
         self.allRts = []
         self.allUsers = []

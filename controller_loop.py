@@ -29,7 +29,7 @@ def controller_loop(environment):
     while not end:
         t = shape.get_run_time()
         cores = controller.tick(t)
-        print(f"{controller.name} - cores: {cores} - RT: {controller.monitoring.getRT()}")
+        print(f"{controller.name} - cores: {cores} - RT: {controller.monitoring.getRT()} - users: {controller.monitoring.getUsers()}")
         container.update(cpu_quota=int(cores*CPU_PERIOD), cpu_period=CPU_PERIOD)
         sleep(controller.period)
 
