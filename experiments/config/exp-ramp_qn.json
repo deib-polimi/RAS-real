@@ -8,7 +8,7 @@
         "path" : "/function/graph_bfs"
     },
     "containerId" : "962ce7783c65",
-    "monitoring_window": 3,
+    "monitoring_window": 1,
     "app_sla": 0.4,
     "wait_time_min": 1,
     "wait_time_max": 1,
@@ -18,7 +18,7 @@
         "class" : "RampGen",
         "params" : {
             "slope": 1,
-            "steady" : 30,
+            "steady" : 40,
             "initial" : 1
         }
     },
@@ -27,7 +27,7 @@
         "params" : {
             "period" : 1, 
             "init_cores" : 1, 
-            "min_cores" : 0.1,
+            "min_cores" : 1,
             "max_cores" : 30,
             "st" :0.8
         }
