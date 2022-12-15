@@ -3,22 +3,22 @@
     "host" : "http://localhost:8080",
     "request" : {
         "method" : "POST",
-        "data" : { "username": "dragonbanana", "random_len": 1000},
+        "data" : {'size': 30000},
         "headers" : {"Content-Type": "application/json"},
-        "path" : "/function/dynamic_html"
+        "path" : "/function/graph_bfs"
     },
-    "containerId" : "add164a7bda5",
+    "containerId" : "962ce7783c65",
     "monitoring_window": 3,
     "app_sla": 0.4,
     "wait_time_min": 1,
     "wait_time_max": 1,
-    "spawn_rate": 6,
-    "end" : 100,
+    "spawn_rate": 1,
+    "end" : 30,
     "generator" : {
         "class" : "RampGen",
         "params" : {
-            "slope": 6,
-            "steady" : 50,
+            "slope": 1,
+            "steady" : 1,
             "initial" : 1
         }
     },
@@ -27,7 +27,7 @@
         "params" : {
             "period" : 1, 
             "init_cores" : 1, 
-            "min_cores" : 1,
+            "min_cores" : 10,
             "max_cores" : 30,
             "st" :0.8
         }
