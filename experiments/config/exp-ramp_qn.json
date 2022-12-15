@@ -7,7 +7,7 @@
         "headers" : {"Content-Type": "application/json"},
         "path" : "/function/graph_bfs"
     },
-    "containerId" : "1cadd160a53c",
+    "containerId" : "1a6c529a1526",
     "monitoring_window": 1,
     "app_sla": 0.4,
     "wait_time_min": 1,
@@ -19,16 +19,16 @@
         "params" : {
             "slope": 0,
             "steady" : 0,
-            "initial" : 10
+            "initial" : 20
         }
     },
     "controller" : {
         "class" : "OPTCTRL",
         "params" : {
             "period" : 1, 
-            "init_cores" : 10, 
-            "min_cores" : 10,
-            "max_cores" : 10,
+            "init_cores" : 1, 
+            "min_cores" : 0.1,
+            "max_cores" : 1,
             "st" :0.8
         }
         
