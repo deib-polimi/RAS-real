@@ -1,13 +1,13 @@
 {
 
-    "host" : "http://localhost:8080",
+    "host" : "http://localhost:8079",
     "request" : {
-        "method" : "POST",
-        "data" : { "username": "dragonbanana", "random_len": 1000},
-        "headers" : {"Content-Type": "application/json"},
-        "path" : "/function/dynamic_html"
+        "method" : "GET",
+        "path" : "/",
+        "headers" : {},
+        "data" : {}
     },
-    "containerId" : "add164a7bda5",
+    "containerId" : "459c32cc8851",
     "monitoring_window": 3,
     "app_sla": 0.4,
     "wait_time_min": 1,
