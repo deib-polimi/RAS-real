@@ -3,7 +3,7 @@
     "host" : "http://localhost:8080",
     "request" : {
         "method" : "POST",
-        "data" : {'size': 30000},
+        "data" : {"size": 30000},
         "headers" : {"Content-Type": "application/json"},
         "path" : "/function/graph_bfs"
     },
