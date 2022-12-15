@@ -26,7 +26,7 @@
         "class" : "OPTCTRL",
         "params" : {
             "period" : 1, 
-            "init_cores" : 2, 
+            "init_cores" : 8, 
             "min_cores" : 8,
             "max_cores" : 8,
             "st" :0.8
