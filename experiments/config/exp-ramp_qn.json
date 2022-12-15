@@ -17,7 +17,7 @@
     "generator" : {
         "class" : "RampGen",
         "params" : {
-            "slope": 3,
+            "slope": 6,
             "steady" : 50,
             "initial" : 1
         }
@@ -27,7 +27,7 @@
         "params" : {
             "period" : 1, 
             "init_cores" : 1, 
-            "min_cores" : 0.1,
+            "min_cores" : 1,
             "max_cores" : 30,
             "st" :0.8
         }
