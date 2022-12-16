@@ -29,8 +29,8 @@
             "init_cores" : 1, 
             "min_cores" : 1.0,
             "max_cores" : 15,
-            "BC" : 0.5, 
-            "DC" : 0.95, 
+            "BC" : 25, 
+            "DC" : 50, 
             "st" :0.8
         }
     }
