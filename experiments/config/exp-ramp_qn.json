@@ -9,16 +9,16 @@
     },
     "containerId" : "9bd9ea6b5c93",
     "monitoring_window": 1,
-    "app_sla": 0.095,
+    "app_sla": 0.09,
     "wait_time_min": 1,
     "wait_time_max": 1,
     "spawn_rate": 1,
-    "end" : 240,
+    "end" : 180,
     "generator" : {
         "class" : "RampGen",
         "params" : {
             "slope": 1,
-            "steady" : 30,
+            "steady" : 35,
             "initial" : 1
         }
     },
@@ -27,8 +27,8 @@
         "params" : {
             "period" : 1, 
             "init_cores" : 1, 
-            "min_cores" : 1,
-            "max_cores" : 20,
+            "min_cores" : 0.2,
+            "max_cores" : 23,
             "st" :0.8
         }
         
