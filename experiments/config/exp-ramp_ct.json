@@ -1,25 +1,25 @@
 {
 
-    "host" : "http://localhost:8079",
+    "host" : "http://localhost:8080",
     "request" : {
-        "method" : "GET",
-        "path" : "/",
-        "headers" : {},
-        "data" : {}
+        "method" : "POST",
+        "data" : {"size": 15000},
+        "headers" : {"Content-Type": "application/json"},
+        "path" : "/function/graph_bfs"
     },
-    "containerId" : "459c32cc8851",
-    "monitoring_window": 3,
-    "app_sla": 0.4,
+    "containerId" : "9bd9ea6b5c93",
+    "monitoring_window": 1,
+    "app_sla": 0.09,
     "wait_time_min": 1,
     "wait_time_max": 1,
-    "spawn_rate": 6,
-    "end" : 150,
+    "spawn_rate": 1,
+    "end" : 240,
     "generator" : {
         "class" : "RampGen",
         "params" : {
-            "slope": 6,
-            "steady" : 50,
-            "initial" : 1
+            "slope": 0,
+            "steady" : 0,
+            "initial" : 5
         }
     },
     "controller" : {
