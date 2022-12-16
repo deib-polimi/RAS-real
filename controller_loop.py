@@ -4,7 +4,7 @@ import gevent
 from time import sleep
 import docker
 
-CPU_PERIOD = 1000000
+CPU_PERIOD = 2000000
 
 client = docker.from_env()
 container = None
