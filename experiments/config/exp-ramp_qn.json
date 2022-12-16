@@ -13,7 +13,7 @@
     "wait_time_min": 1,
     "wait_time_max": 1,
     "spawn_rate": 1,
-    "end" : 180,
+    "end" : 240,
     "generator" : {
         "class" : "RampGen",
         "params" : {
@@ -31,6 +31,5 @@
             "max_cores" : 23,
             "st" :0.8
         }
-        
     }
 }
