@@ -1,6 +1,6 @@
 {
     "hosts" : ["http://localhost:8080", "http://localhost:8081"],
-    "containerIds" : ["ae831f2282ba", "9b5431de6ba9"],
+    "containerIds" : ["79cd31e07f5b", "0d8cd79e5c2c"],
     "request" : {
         "method" : "POST",
         "data" : {"size": 15000},
