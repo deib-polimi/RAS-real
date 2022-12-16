@@ -7,7 +7,7 @@
         "path" : "/function/graph_bfs"
     },
     "containerId" : "8193fff747cf",
-    "monitoring_window": 15,
+    "monitoring_window": 30,
     "app_sla": 0.15,
     "wait_time_min": 1,
     "wait_time_max": 1,
