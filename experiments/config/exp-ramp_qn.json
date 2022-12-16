@@ -9,7 +9,7 @@
     },
     "containerId" : "d73f9b86fa06",
     "monitoring_window": 1,
-    "app_sla": 0.4,
+    "app_sla": 0.01,
     "wait_time_min": 1,
     "wait_time_max": 1,
     "spawn_rate": 1,
