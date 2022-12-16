@@ -9,7 +9,7 @@
     },
     "containerId" : "9bd9ea6b5c93",
     "monitoring_window": 5,
-    "app_sla": 0.09,
+    "app_sla": 0.15,
     "wait_time_min": 1,
     "wait_time_max": 1,
     "spawn_rate": 1,
@@ -29,8 +29,8 @@
             "init_cores" : 1, 
             "min_cores" : 0.2,
             "max_cores" : 23,
-            "BC" : 0.25, 
-            "DC" : 0.5, 
+            "BC" : 0.5, 
+            "DC" : 0.95, 
             "st" :0.8
         }
     }
