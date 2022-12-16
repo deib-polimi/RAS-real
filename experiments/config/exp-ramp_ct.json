@@ -17,9 +17,9 @@
     "generator" : {
         "class" : "RampGen",
         "params" : {
-            "slope": 0,
-            "steady" : 0,
-            "initial" : 15
+            "slope": 0.25,
+            "steady" : 120,
+            "initial" : 1
         }
     },
     "controller" : {
