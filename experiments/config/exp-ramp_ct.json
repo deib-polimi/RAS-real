@@ -27,8 +27,8 @@
         "params" : {
             "period" : 1, 
             "init_cores" : 1, 
-            "min_cores" : 0.2,
-            "max_cores" : 23,
+            "min_cores" : 0.5,
+            "max_cores" : 8,
             "BC" : 0.5, 
             "DC" : 0.95, 
             "st" :0.8
