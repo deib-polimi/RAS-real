@@ -8,7 +8,7 @@
         "path" : "/function/graph_bfs"
     },
     "containerId" : "9bd9ea6b5c93",
-    "monitoring_window": 5,
+    "monitoring_window": 30,
     "app_sla": 0.15,
     "wait_time_min": 1,
     "wait_time_max": 1,
@@ -25,9 +25,9 @@
     "controller" : {
         "class" : "CTControllerScaleX",
         "params" : {
-            "period" : 1, 
+            "period" : 5, 
             "init_cores" : 1, 
-            "min_cores" : 0.5,
+            "min_cores" : 0.2,
             "max_cores" : 8,
             "BC" : 0.5, 
             "DC" : 0.95, 
