@@ -163,10 +163,10 @@ class OPTCTRL(Controller):
             self.Ik+=rt[0]-self.setpoint[0]
         
         print(rt,users, cores)
-        if(t>self.esrimationWindow):
-            self.cores =max(self.OPTController(self.stime, self.setpoint, users, self.max_cores)+0.0*self.Ik, self.min_cores)
-        else:
-            self.cores=users[0]
+        #if(t>self.esrimationWindow):
+        self.cores =max(self.OPTController(self.stime, self.setpoint, users, self.max_cores)+0.0*self.Ik, self.min_cores)
+        #else:
+        #    self.cores=users[0]
     
     def reset(self):
         super().reset()
