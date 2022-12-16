@@ -75,7 +75,7 @@ class OPTCTRL(Controller):
             for i in range(nApp):
                 sSum += S[0, i]
                 # obj+=E_l1[0,i]
-                obj += (T[0, i] / C[i] - 1 / tgt[i]) ** 2
+                obj += (T[0, i] / C[i] - 1.0 / tgt[i]) ** 2
             
            # self.model.subject_to(sSum <= maxCore)
         
@@ -155,6 +155,8 @@ class OPTCTRL(Controller):
             self.stime[app] = self.estimator.estimate(np.array(self.rtSamples), 
                                                       np.array(self.cSamples),
                                                       np.array(self.userSamples))
+        
+        print(self.stime)
         
         # risolvo il problema di controllo ottimo
         if(t>0):
