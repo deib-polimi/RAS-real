@@ -25,13 +25,15 @@ controller.setMonitoring(monitoring)
 controller.setGenerator(generator)
 controller.setSLA(appSla)
 request = data["request"]
-request_maker.setup(monitoring, controller, request["method"], request["headers"], request["data"], request["path"])
-controller_loop.setup(controller, data["containerId"])
+cpu_range_start = data["cpu_range_start"]
+request_maker.setup(monitoring, controller, data["hosts"], request["method"], request["headers"], request["data"], request["path"])
+controller_loop.setup(controller, data["containerIds"], cpu_range_start)
 printer.setup(monitoring, generator, controller, EXP_FILE.split("/")[-1].replace(".json", ""))
+
 
 class UserTask(HttpUser):
     wait_time = between(data["wait_time_min"], data["wait_time_max"])
-    host = data["host"]
+    host = data["hosts"][0]
     @task
     def test(self):
         request_maker.run(self)
