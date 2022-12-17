@@ -42,7 +42,9 @@ class Monitoring:
             if int(t) != second:
                 violations.append(appendViolation(rts))
                 rts = []
+                second = int(t)
             rts.append(rt)
+
         violations.append(appendViolation(rts))
         return sum(violations)
 
