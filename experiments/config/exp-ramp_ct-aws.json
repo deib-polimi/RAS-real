@@ -13,12 +13,12 @@
     "wait_time_min": 1,
     "wait_time_max": 1,
     "spawn_rate": 1,
-    "end" : 240,
+    "end" : 300,
     "generator" : {
         "class" : "RampGen",
         "params" : {
-            "slope": 2,
-            "steady" : 120,
+            "slope": 1,
+            "steady" : 140,
             "initial" : 10,
             "rampstart" : 100
         }
