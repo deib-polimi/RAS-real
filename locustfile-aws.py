@@ -28,7 +28,7 @@ request = data["request"]
 cpu_range_start = data["cpu_range_start"]
 request_maker.setup(monitoring, controller, data["hosts"], request["method"], request["headers"], request["data"], request["path"])
 controller_loop.setup(controller, data["containerIds"], cpu_range_start)
-printer.setup(monitoring, generator, controller, EXP_FILE.split("/")[-1].replace(".json", ""))
+printer.setup(monitoring, generator, controller, EXP_FILE.split("/")[-1].replace(".json", ""), EXP_FILE)
 
 
 class UserTask(HttpUser):
