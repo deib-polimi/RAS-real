@@ -111,6 +111,6 @@ def setup(_monitoring, _generator, _controller, _name, data):
     if not os.path.exists(output_path):
         os.makedirs(output_path)
     with open(f"{output_path}/config.json", 'w') as f:
-        json.dump(data, f)
+        json.dump(data, f, indent=4)
 
     
