@@ -6,7 +6,7 @@ from estimator import QNEstimaator
 
 class OPTCTRL(Controller):
     
-    esrimationWindow = 10;
+    esrimationWindow = 100000;
     rtSamples = None
     cSamples = None
     userSamples = None
@@ -144,6 +144,7 @@ class OPTCTRL(Controller):
             users = [users]
             cores = [cores]
         
+        print("ncmp",len(array(self.monitoring.getAllRTs())),"t",t)
         self.addRtSample(np.maximum(rt,[0]), users, cores)
         
         # mRt = np.array(self.rtSamples).mean(axis=0)
