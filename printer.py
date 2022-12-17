@@ -47,7 +47,7 @@ def log():
 
         output = ""
         for (rts, cores, violations) in zip(arts, acores, aviolations):
-            output += "\\textit{%s} & \\textit{%s} & $%.2f$ & $%.2f$ & $%.2f$ & $%.2f$ & $%d$ & $%d$ \\\\ \hline \n" % (controller.name, generator.name, rts.mean(), rts.std(), rts.min(), rts.max(), violations, cores.mean())
+            output += "\\textit{%s} & \\textit{%s} & $%.2f$ & $%.2f$ & $%.2f$ & $%.2f$ & $%d$ & $%2f$ \\\\ \hline \n" % (controller.name, generator.name, rts.mean(), rts.std(), rts.min(), rts.max(), violations, cores.mean())
         return output
 
 def plot():

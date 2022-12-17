@@ -30,7 +30,21 @@ class Monitoring:
         return self.reducer(self.rts)
 
     def getViolations(self):
-        return sum([1 if rt > self.sla else 0 for rt in self.allRts])
+        def appendViolation(rts):
+            if self.reducer(rts) > self.sla:
+                return 1
+            else:
+                return 0
+        second = int(self.times[0])
+        violations = []
+        rts = []
+        for (t, rt) in zip(self.time, self.allRts):
+            if int(t) != second:
+                violations.append(appendViolation(rts))
+                rts = []
+            rts.append(rt)
+        violations.append(appendViolation(rts))
+        return violations
 
     def getAllRTs(self):
         return self.allRts
