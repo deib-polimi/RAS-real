@@ -19,7 +19,7 @@
         "params" : {
         	"period": 200,
             "mod": 20,
-            "shift": 1
+            "shift": 20
         }
     },
     "controller" : {
