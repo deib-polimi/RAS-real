@@ -35,7 +35,7 @@ class Monitoring:
                 return 1
             else:
                 return 0
-        second = int(self.times[0])
+        second = int(self.time[0])
         violations = []
         rts = []
         for (t, rt) in zip(self.time, self.allRts):
