@@ -10,6 +10,8 @@ class RampGen(Generator):
         self.rampstart = rampstart
 
     def f(self, x):
+        if x < self.rampstart:
+            return self.initial
         if x < self.steady:
             return self.initial+self.slope*x
         else:
