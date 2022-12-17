@@ -66,6 +66,7 @@ def plot():
         fig, ax1 = plt.subplots()
         ax1.set_ylabel('# workload')
         ax1.set_xlabel("time [s]")
+        print(atimes, users)
         ax1.plot(atimes, users, 'r--', linewidth=2)
         ax2 = ax1.twinx()
         ax2.plot(atimes, cores, 'b-', linewidth=2)
