@@ -8,7 +8,7 @@
         "path" : "/function/dynamic_html"
     },
     "cpu_range_start" : 0,
-    "monitoring_window": 5,
+    "monitoring_window": 20,
     "app_sla": 0.25,
     "wait_time_min": 1,
     "wait_time_max": 1,
@@ -31,7 +31,7 @@
             "min_cores" : 1,
             "max_cores" : 16,
             "BC" : 0.05, 
-            "DC" : 0.03, 
+            "DC" : 0.04, 
             "st" : 0.7
         }
     }
