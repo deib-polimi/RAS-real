@@ -44,7 +44,7 @@ class Monitoring:
                 rts = []
             rts.append(rt)
         violations.append(appendViolation(rts))
-        return violations
+        return sum(violations)
 
     def getAllRTs(self):
         return self.allRts
