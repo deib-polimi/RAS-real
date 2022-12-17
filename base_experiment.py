@@ -1,12 +1,10 @@
 from locust import HttpUser, LoadTestShape, task, between
-import json
 import request_maker
 from generators import *
 from controllers import *
 from monitoring import Monitoring
 import controller_loop
 import printer
-from locust import events
 from locust.runners import WorkerRunner
 
 
@@ -28,10 +26,7 @@ class Workload(LoadTestShape):
         return (user_count, self.spawn_rate)
 
 
-def setup(exp_file):
-    with open(exp_file) as f:
-        data = json.load(f)
-
+def setup(exp_name, data):
     appSla = data["app_sla"]
     generator = eval(data["generator"]["class"])(**data["generator"]["params"])
     controller = eval(data["controller"]["class"])(**data["controller"]["params"])
@@ -45,7 +40,7 @@ def setup(exp_file):
     cpu_range_start = data["cpu_range_start"]
     request_maker.setup(monitoring, controller, data["hosts"], request["method"], request["headers"], request["data"], request["path"])
     controller_loop.setup(controller, data["containerIds"], cpu_range_start)
-    printer.setup(monitoring, generator, controller, exp_file.split("/")[-1].replace(".json", ""), exp_file)
+    printer.setup(monitoring, generator, controller, exp_name, data)
     
     UserTask.wait_time = between(data["wait_time_min"], data["wait_time_max"])
     UserTask.host = data["hosts"][0]

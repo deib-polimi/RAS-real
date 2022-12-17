@@ -3,7 +3,7 @@ from scipy.io import savemat
 import matplotlib.pyplot as plt
 import time
 import os
-import shutil
+import json
 from locust import events
 from locust.runners import WorkerRunner
 
@@ -101,7 +101,7 @@ def plot():
         i += 1
 
 
-def setup(_monitoring, _generator, _controller, _name, exp_file):
+def setup(_monitoring, _generator, _controller, _name, data):
     global monitoring, generator, controller, name, output_path
     monitoring = _monitoring
     generator = _generator
@@ -110,5 +110,7 @@ def setup(_monitoring, _generator, _controller, _name, exp_file):
     output_path = f"experiments/results/{name}-{id}"
     if not os.path.exists(output_path):
         os.makedirs(output_path)
-    shutil.copy(exp_file, f"{output_path}/config.json")
+    with open(f"{output_path}/config.json", 'w') as f:
+        json.dump(data, f)
+
     
