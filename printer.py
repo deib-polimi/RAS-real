@@ -6,6 +6,7 @@ import os
 from locust import events
 from locust.runners import WorkerRunner
 
+
 monitoring = None
 generator = None 
 controller = None 
@@ -99,7 +100,7 @@ def plot():
         i += 1
 
 
-def setup(_monitoring, _generator, _controller, _name):
+def setup(_monitoring, _generator, _controller, _name, exp_file):
     global monitoring, generator, controller, name, output_path
     monitoring = _monitoring
     generator = _generator
@@ -108,3 +109,5 @@ def setup(_monitoring, _generator, _controller, _name):
     output_path = f"experiments/results/{name}-{id}"
     if not os.path.exists(output_path):
         os.makedirs(output_path)
+    os.copy(exp_file, f"{output_path}/config.json")
+    
