@@ -13,11 +13,11 @@ CONFIG = {
     "wait_time_min": 1,
     "wait_time_max": 1,
     "spawn_rate": 1,
-    "end" : 300,
+    "end" : 600,
     "generator" : {
         "class" : "SinGen",
         "params" : {
-        	"period": 300,
+        	"period": 200,
             "mod": 20,
             "shift": 20
         }
