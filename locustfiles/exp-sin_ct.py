@@ -1,4 +1,4 @@
-{
+CONFIG = {
     "host" : "http://localhost:80",
     "request" : {
         "method" : "GET",
@@ -34,3 +34,8 @@
         }
     }
 }
+
+EXP_NAME = __file__.split("/")[-1].split(".")[0]
+
+from base_experiment import *
+setup(EXP_NAME, CONFIG)

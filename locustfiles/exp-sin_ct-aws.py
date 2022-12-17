@@ -1,4 +1,4 @@
-{
+CONFIG = {
     "hosts" : ["http://localhost:8080", "http://localhost:8081"],
     "containerIds" : ["cf4390cdcb2d", "e5aed9e83503"],
     "request" : {
@@ -35,3 +35,9 @@
         }
     }
 }
+
+
+EXP_NAME = __file__.split("/")[-1].split(".")[0]
+
+from base_experiment import *
+setup(EXP_NAME, CONFIG)

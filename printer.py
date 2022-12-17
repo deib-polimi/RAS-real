@@ -14,7 +14,7 @@ controller = None
 name = None 
 
 id = int(time.time()*1000)
-output_path = None
+output_path = "experiments/"
 
 
 @events.test_stop.add_listener
@@ -107,7 +107,7 @@ def setup(_monitoring, _generator, _controller, _name, data):
     generator = _generator
     controller = _controller
     name = _name
-    output_path = f"experiments/results/{name}-{id}"
+    output_path += f"{name}-{id}"
     if not os.path.exists(output_path):
         os.makedirs(output_path)
     with open(f"{output_path}/config.json", 'w') as f:
