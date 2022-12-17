@@ -3,13 +3,13 @@
     "containerIds" : ["cf4390cdcb2d", "e5aed9e83503"],
     "request" : {
         "method" : "POST",
-        "data" : {"size": 15000},
+        "data" : { "username": "dragonbanana", "random_len": 80000},
         "headers" : {"Content-Type": "application/json"},
-        "path" : "/function/graph_bfs"
+        "path" : "/function/dynamic_html"
     },
     "cpu_range_start" : 0,
-    "monitoring_window": 30,
-    "app_sla": 0.15,
+    "monitoring_window": 10,
+    "app_sla": 0.25,
     "wait_time_min": 1,
     "wait_time_max": 1,
     "spawn_rate": 1,
