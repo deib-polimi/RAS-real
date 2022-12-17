@@ -17,9 +17,9 @@
     "generator" : {
         "class" : "SinGen",
         "params" : {
-        	"period": 150,
-            "mod": 25,
-            "shift": 25
+        	"period": 200,
+            "mod": 20,
+            "shift": 1
         }
     },
     "controller" : {
