@@ -1,7 +1,8 @@
 from numpy import array
 from scipy.io import savemat
 import matplotlib.pyplot as plt
-
+import time
+import os
 from locust import events
 from locust.runners import WorkerRunner
 
@@ -10,13 +11,14 @@ generator = None
 controller = None 
 name = None 
 
-output_path = "experiments/results/"
+id = int(time.time()*1000)
+output_path = None
+
 
 @events.test_stop.add_listener
 def on_locust_stop(environment, **_kwargs):
     if not isinstance(environment.runner, WorkerRunner):
-        with open(f"{output_path}{name}.tex", "w") as f:
-           f.write(log())
+        logTeX()
         plot()
         saveMat()
         
@@ -34,9 +36,9 @@ def saveMat():
 
     for (time, rts, cores, violations) in zip(atimes, arts, acores, aviolations):
         mdic = {"time": time, "rts": rts,"cores":cores,"violations":violations}    
-        savemat("%s%s_%s.mat"%(output_path,controller.name,generator.name), mdic)
+        savemat(f"{output_path}/data.mat", mdic)
 
-def log():
+def logTeX():
         arts = array(monitoring.getAllRTs())
         acores = array(monitoring.getAllCores())
         aviolations = monitoring.getViolations()
@@ -47,8 +49,10 @@ def log():
 
         output = ""
         for (rts, cores, violations) in zip(arts, acores, aviolations):
-            output += "\\textit{%s} & \\textit{%s} & $%.2f$ & $%.2f$ & $%.2f$ & $%.2f$ & $%d$ & $%2f$ \\\\ \hline \n" % (controller.name, generator.name, rts.mean(), rts.std(), rts.min(), rts.max(), violations, cores.mean())
-        return output
+            output += "\\textit{%s} & \\textit{%s} & $%.2f$ & $%.2f$ & $%.2f$ & $%.2f$ & $%d$ & $%.2f$ \\\\ \hline \n" % (controller.name, generator.name, rts.mean(), rts.std(), rts.min(), rts.max(), violations, cores.mean())
+        
+        with open(f"{output_path}/data.tex", "w") as f:
+           f.write(output)
 
 def plot():
     i = 0
@@ -71,7 +75,7 @@ def plot():
         ax2.plot(atimes, cores, 'b-', linewidth=2)
         ax2.set_ylabel('# cores')
         fig.tight_layout()
-        plt.savefig(f"{output_path}/{name}-{i}-workcore.pdf")
+        plt.savefig(f"{output_path}/workcore.pdf")
         plt.close()
 
         fig, ax1 = plt.subplots()
@@ -90,14 +94,17 @@ def plot():
         ax1.set_ylim([m, M])
         ax2.set_ylim([m, M])
         fig.tight_layout()
-        plt.savefig(f"{output_path}/{name}-{i}-rt.pdf")
+        plt.savefig(f"{output_path}/rt.pdf")
         plt.close()
         i += 1
 
 
 def setup(_monitoring, _generator, _controller, _name):
-    global monitoring, generator, controller, name
+    global monitoring, generator, controller, name, output_path
     monitoring = _monitoring
     generator = _generator
     controller = _controller
     name = _name
+    output_path = f"experiments/results/{name}-{id}"
+    if not os.path.exists(output_path):
+        os.makedirs(output_path)
