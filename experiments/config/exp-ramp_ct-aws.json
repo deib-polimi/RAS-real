@@ -18,14 +18,15 @@
         "class" : "RampGen",
         "params" : {
             "slope": 1,
-            "steady" : 120,
-            "initial" : 5
+            "steady" : 100,
+            "initial" : 10,
+            "rampstart" : 50
         }
     },
     "controller" : {
         "class" : "CTControllerScaleX",
         "params" : {
-            "period" : 5, 
+            "period" : 1, 
             "init_cores" : 1, 
             "min_cores" : 0.5,
             "max_cores" : 8,

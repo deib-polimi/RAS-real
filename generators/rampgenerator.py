@@ -2,11 +2,12 @@ from .generator import Generator
 
 
 class RampGen(Generator):
-    def __init__(self, slope, steady, initial=1):
+    def __init__(self, slope, steady, initial=1, rampstart=0):
         super().__init__()
         self.slope = slope
         self.steady = steady
         self.initial = initial
+        self.rampstart = rampstart
 
     def f(self, x):
         if x < self.steady:
