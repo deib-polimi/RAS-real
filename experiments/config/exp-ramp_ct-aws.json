@@ -13,7 +13,7 @@
     "wait_time_min": 1,
     "wait_time_max": 1,
     "spawn_rate": 1,
-    "end" : 200,
+    "end" : 100,
     "generator" : {
         "class" : "RampGen",
         "params" : {
@@ -26,7 +26,7 @@
     "controller" : {
         "class" : "CTControllerScaleX",
         "params" : {
-            "period" : 3, 
+            "period" : 1, 
             "init_cores" : 1, 
             "min_cores" : 0.5,
             "max_cores" : 16,
