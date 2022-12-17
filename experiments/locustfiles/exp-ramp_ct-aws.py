@@ -38,5 +38,5 @@ data = {
 }
 
 from base_experiment import *
-print(__file__.split("/")[-1].split(".")[-1])
+print(__file__.split("/")[-1].split(".")[0])
 setup(__file__.split("/")[-1].split(".")[-1], data)
