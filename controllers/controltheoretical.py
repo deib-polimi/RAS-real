@@ -18,7 +18,7 @@ class CTControllerScaleX(Controller):
         xc = float(self.xc_prec + self.BC * e)
         oldcores = self.cores
         self.cores = min(min(max(max(self.min_cores, oldcores/MAX_SCALE_OUT_TIMES), xc + self.DC * e), oldcores*MAX_SCALE_OUT_TIMES), self.max_cores)
-        self.xc_prec = float(self.cores - self.BC * e)
+        self.xc_prec = float(self.cores - self.DC * e)
     
 
     def __str__(self):
