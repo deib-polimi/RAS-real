@@ -26,12 +26,12 @@
     "controller" : {
         "class" : "CTControllerScaleX",
         "params" : {
-            "period" : 5, 
+            "period" : 3, 
             "init_cores" : 1, 
             "min_cores" : 1,
             "max_cores" : 16,
             "BC" : 0.09, 
-            "DC" : 0.07, 
+            "DC" : 0.09, 
             "st" : 0.7
         }
     }
