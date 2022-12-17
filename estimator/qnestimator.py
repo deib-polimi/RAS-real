@@ -11,9 +11,9 @@ class QNEstimaator():
     def estimate(self,rt,s,c):
         self.model = casadi.Opti()
         
-        # print("rt",rt)
-        # print("server",s)
-        # print("client",c)
+        print("rt",rt)
+        print("server",s)
+        print("client",c)
         
         
         e = self.model.variable(1,1);
