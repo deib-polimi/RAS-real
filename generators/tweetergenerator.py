@@ -2,7 +2,7 @@ from .generator import Generator
 from scipy.io import loadmat
 
 
-class tweetterGen(Generator):
+class TweetGen(Generator):
     
     step=None
     tweets=None
