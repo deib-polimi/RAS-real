@@ -1,11 +1,11 @@
 CONFIG = {
     "hosts" : ["http://localhost:8080", "http://localhost:8081"],
-    "containerIds" : ["dynamic_set", "dynamic_quota"],
+    "containerIds" : ["graph_set", "graph_quota"],
     "request" : {
         "method" : "POST",
-        "data" : { "username": "dragonbanana", "random_len": 25000},
+        "data" : { "size" : 25000 },
         "headers" : {"Content-Type": "application/json"},
-        "path" : "/function/dynamic_html"
+        "path" : "/function/graph_mst"
     },
     "cpu_range_start" : 0,
     "monitoring_window": 30,
@@ -24,15 +24,13 @@ CONFIG = {
         }
     },
     "controller" : {
-        "class" : "CTControllerScaleX",
+        "class" : "TargetController",
         "params" : {
-            "period" : 3, 
+            "period" : 30, 
             "init_cores" : 1, 
             "min_cores" : 0.5,
             "max_cores" : 16,
-            "BC" : 0.15, 
-            "DC" : 0.32, 
-            "st" : 0.7
+            "cooldown" : 0
         }
     }
 }

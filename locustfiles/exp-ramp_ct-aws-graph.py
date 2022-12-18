@@ -3,7 +3,7 @@ CONFIG = {
     "containerIds" : ["graph_set", "graph_quota"],
     "request" : {
         "method" : "POST",
-        "data" : { "size": 25000},
+        "data" : { "size" : 25000 },
         "headers" : {"Content-Type": "application/json"},
         "path" : "/function/graph_mst"
     },
