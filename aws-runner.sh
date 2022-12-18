@@ -22,4 +22,5 @@ do
   git add -A
   git commit -am 'aws-exp'
   git push
+  sleep 2m
 done
