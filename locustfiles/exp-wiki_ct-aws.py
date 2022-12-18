@@ -29,7 +29,7 @@ CONFIG = {
             "min_cores" : 0.5,
             "max_cores" : 16,
             "BC" : 0.2, 
-            "DC" : 0.04, 
+            "DC" : 0.2, 
             "st" : 0.7
         }
     }
