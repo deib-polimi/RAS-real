@@ -1,4 +1,4 @@
-#!/bin/bash
+ #!/bin/bash
 
 # Check if the required number of arguments have been provided
 if [ $# -lt 3 ]
@@ -14,5 +14,5 @@ shift 2
 # Loop through all remaining arguments
 for file in "$@"
 do
-   ./aws-runner.sh 
-done
+   ./aws-runner.sh $file $N $CPU_RANGE 
+done 
