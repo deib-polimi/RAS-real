@@ -6,7 +6,7 @@ from estimator import QNEstimaator
 
 class OPTCTRL(Controller):
     
-    esrimationWindow = 100000;
+    esrimationWindow = 1;
     rtSamples = None
     cSamples = None
     userSamples = None
@@ -145,7 +145,7 @@ class OPTCTRL(Controller):
             cores = [cores]
         
         #cerco di stimare il throughput, cosi da stimare il numero di utenti e il rispettivo tempo di servizio
-        print("ncmp",len(array(self.monitoring.getAllRTs())),"t",t)
+        print("ncmp",len(np.array(self.monitoring.getAllRTs())),"t",t)
         self.addRtSample(np.maximum(rt,[0]), users, cores)
         
         # mRt = np.array(self.rtSamples).mean(axis=0)
