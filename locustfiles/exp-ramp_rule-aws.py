@@ -1,6 +1,6 @@
 CONFIG = {
     "hosts" : ["http://localhost:8080", "http://localhost:8081"],
-    "containerIds" : ["cf4390cdcb2d", "e5aed9e83503"],
+    "containerIds" : ["dynamic_set", "dynamic_quota"],
     "request" : {
         "method" : "POST",
         "data" : { "username": "dragonbanana", "random_len": 80000},

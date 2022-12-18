@@ -1,5 +1,3 @@
-appSLA = 0.25
-
 CONFIG = {
     "hosts" : ["http://localhost:8080", "http://localhost:8081"],
     "containerIds" : ["dynamic_set", "dynamic_quota"],
@@ -16,16 +14,15 @@ CONFIG = {
     "wait_time_max": 1,
     "spawn_rate": 1,
     "end" : 600,
-    "generator" : {
-        "class" : "SinGen",
+     "generator" : {
+        "class" : "TweetGen",
         "params" : {
-        	"period": 200,
-            "mod": 20,
-            "shift": 20
+        	"bias": 40,
+            "shift": 10,
         }
     },
     "controller" : {
-        "class" : "TargetController",
+        "class" : "RBControllerWithCooldown",
         "params" : {
             "period" : 30, 
             "init_cores" : 1, 

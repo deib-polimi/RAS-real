@@ -17,17 +17,16 @@ CONFIG = {
     "spawn_rate": 1,
     "end" : 600,
     "generator" : {
-        "class" : "SinGen",
+        "class" : "TweetGen",
         "params" : {
-        	"period": 200,
-            "mod": 20,
-            "shift": 20
+        	"bias": 40,
+            "shift": 10,
         }
     },
     "controller" : {
         "class" : "TargetController",
         "params" : {
-            "period" : 30, 
+            "period" : 3, 
             "init_cores" : 1, 
             "min_cores" : 0.5,
             "max_cores" : 16,

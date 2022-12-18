@@ -17,11 +17,10 @@ CONFIG = {
     "spawn_rate": 1,
     "end" : 600,
     "generator" : {
-        "class" : "SinGen",
+        "class" : "TweetGen",
         "params" : {
-        	"period": 200,
-            "mod": 20,
-            "shift": 20
+        	"bias": 40,
+            "shift": 10,
         }
     },
     "controller" : {

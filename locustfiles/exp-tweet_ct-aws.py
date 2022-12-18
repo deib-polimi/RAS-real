@@ -1,5 +1,3 @@
-appSLA = 0.25
-
 CONFIG = {
     "hosts" : ["http://localhost:8080", "http://localhost:8081"],
     "containerIds" : ["dynamic_set", "dynamic_quota"],
@@ -17,21 +15,22 @@ CONFIG = {
     "spawn_rate": 1,
     "end" : 600,
     "generator" : {
-        "class" : "SinGen",
+        "class" : "TweetGen",
         "params" : {
-        	"period": 200,
-            "mod": 20,
-            "shift": 20
+        	"bias": 40,
+            "shift": 10,
         }
     },
     "controller" : {
-        "class" : "TargetController",
+        "class" : "CTControllerScaleX",
         "params" : {
-            "period" : 30, 
+            "period" : 3, 
             "init_cores" : 1, 
             "min_cores" : 0.5,
             "max_cores" : 16,
-            "cooldown" : 0
+            "BC" : 0.15, 
+            "DC" : 0.32, 
+            "st" : 0.7
         }
     }
 }
