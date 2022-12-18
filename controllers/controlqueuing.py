@@ -144,6 +144,7 @@ class OPTCTRL(Controller):
             users = [users]
             cores = [cores]
         
+        #cerco di stimare il throughput, cosi da stimare il numero di utenti e il rispettivo tempo di servizio
         print("ncmp",len(array(self.monitoring.getAllRTs())),"t",t)
         self.addRtSample(np.maximum(rt,[0]), users, cores)
         
