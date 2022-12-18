@@ -10,8 +10,8 @@ CONFIG = {
     "cpu_range_start" : 0,
     "monitoring_window": 30,
     "app_sla": 0.25,
-    "wait_time_min": 0.001,
-    "wait_time_max": 0.001,
+    "wait_time_min": 0.01,
+    "wait_time_max": 0.01,
     "spawn_rate": 1,
     "end" : 240,
     "generator" : {
