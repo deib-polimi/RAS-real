@@ -21,8 +21,8 @@ class RBController(Controller):
 
 
 class RBControllerWithCooldown(RBController):
-    def __init__(self, period, init_cores, step=1, l=0.5, h=0.9, cooldown=60):
-        super().__init__(period, init_cores, step, l, h)
+    def __init__(self, period, init_cores, min_cores, max_cores, step=1, l=0.5, h=0.9, cooldown=60):
+        super().__init__(period, init_cores, min_cores, max_cores, step, l, h)
         self.cooldown = cooldown
 
     def reset(self):
