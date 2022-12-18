@@ -22,5 +22,7 @@ do
   git add -A
   git commit -am 'aws-exp'
   git push
+  echo "waiting two mins"
   sleep 2m
+  echo "restarting"
 done
