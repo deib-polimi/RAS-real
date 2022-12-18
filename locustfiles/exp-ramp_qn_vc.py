@@ -19,7 +19,7 @@ CONFIG = {
         "params" : {
             "slope": 0,
             "steady" : 0,
-            "initial" : 5
+            "initial" : 10
         }
     },
     "controller" : {
