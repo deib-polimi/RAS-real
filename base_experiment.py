@@ -47,7 +47,7 @@ def setup(exp_name, data):
     UserTask.request_maker = request_maker
 
     Workload.spawn_rate = data["spawn_rate"]
-    Workload.end = 10
+    Workload.end = data.get("end", None)
     Workload.generator = generator
 
 
