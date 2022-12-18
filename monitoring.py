@@ -45,9 +45,7 @@ class Monitoring:
                 rts = []
                 second = int(t)
             rts.append(rt)
-            print(rts, violations, t, second)
         violations.append(appendViolation(rts))
-        print(rts, violations, t, second)
         return sum(violations)
 
     def getAllRTs(self):
