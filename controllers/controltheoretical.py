@@ -14,6 +14,9 @@ class CTControllerScaleX(Controller):
 
     def control(self, t):
         rt = self.monitoring.getRT()
+        if rt == 0:
+            return self.init_cores
+
         e = 1/self.setpoint - 1/rt
         xc = float(self.xc_prec + self.BC * e)
         oldcores = self.cores
