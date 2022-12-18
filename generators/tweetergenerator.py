@@ -8,6 +8,7 @@ class TweetGen(Generator):
     tweets=None
     
     def __init__(self, shift=0, bias = 10):
+        super().__init__()
         data=loadmat("./generators/twitter_20210101_730-24_freq120sec.mat")
         self.step=data["step"]
         self.tweets=data["tweets"][0]
