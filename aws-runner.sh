@@ -21,6 +21,7 @@ do
   taskset -c $CPUS locust --headless -f $FILE
   git add -A
   git commit -am 'aws-exp'
+  git pull --rebase
   git push
   echo "waiting two mins"
   sleep 2m
