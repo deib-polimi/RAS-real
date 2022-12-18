@@ -13,14 +13,14 @@ CONFIG = {
     "wait_time_min": 1,
     "wait_time_max": 1,
     "spawn_rate": 1,
-    "end" : 300,
+    "end" : 600,
     "generator" : {
         "class" : "RampGen",
         "params" : {
-            "slope": 1,
-            "steady" : 140,
-            "initial" : 10,
-            "rampstart" : 100
+            "slope": 0.15,
+            "steady" : 450,
+            "initial" : 20,
+            "rampstart" : 150
         }
     },
     "controller" : {

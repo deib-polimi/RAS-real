@@ -38,14 +38,16 @@ class Monitoring:
         second = int(self.time[0])
         violations = []
         rts = []
+        
         for (t, rt) in zip(self.time, self.allRts):
             if int(t) != second:
                 violations.append(appendViolation(rts))
                 rts = []
                 second = int(t)
             rts.append(rt)
-
+            print(rts, violations, t, second)
         violations.append(appendViolation(rts))
+        print(rts, violations, t, second)
         return sum(violations)
 
     def getAllRTs(self):
