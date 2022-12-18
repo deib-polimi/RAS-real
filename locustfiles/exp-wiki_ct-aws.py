@@ -24,7 +24,7 @@ CONFIG = {
     "controller" : {
         "class" : "CTControllerScaleX",
         "params" : {
-            "period" : 3, 
+            "period" : 5, 
             "init_cores" : 1, 
             "min_cores" : 0.5,
             "max_cores" : 16,
