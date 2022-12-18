@@ -1,3 +1,5 @@
+
+
 CONFIG = {
      "hosts" : ["http://localhost:8080", "http://localhost:8081"],
     "containerIds" : ["dynamic_set", "dynamic_quota"],
@@ -10,8 +12,7 @@ CONFIG = {
     "cpu_range_start" : 0,
     "monitoring_window": 30,
     "app_sla": 0.25,
-    "wait_time_min": 0.01,
-    "wait_time_max": 0.01,
+    "wait_time": 0,
     "spawn_rate": 1,
     "end" : 240,
     "generator" : {
