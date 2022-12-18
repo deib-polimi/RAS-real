@@ -13,12 +13,12 @@ CONFIG = {
     "wait_time_min": 0.1,
     "wait_time_max": 0.1,
     "spawn_rate": 1,
-    "end" : 400,
+    "end" : 600,
     "generator" : {
         "class" : "RampGen",
         "params" : {
             "slope": 0.0833,
-            "steady" : 400,
+            "steady" : 600,
             "initial" : 2,
             "rampstart" : 100
         }
@@ -29,7 +29,7 @@ CONFIG = {
             "period" : 1, 
             "init_cores" : 1, 
             "min_cores" : 0.1,
-            "max_cores" : 15,
+            "max_cores" : 20,
             "st" :0.7
         }
     }
