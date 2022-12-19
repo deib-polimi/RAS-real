@@ -75,7 +75,7 @@ if __name__ == '__main__':
     estimator=QNEstimaator();
     #print(data["RtLine"][:,1],data["cores"][:,1],data["users"][:,0])
     st=time.time()
-    e=estimator.estimate(data["RtLine"][30:-1,1],data["cores"][30:-1,1], data["users"][30:-1,0])
+    e=estimator.estimate(data["RtLine"][0:-1,1],data["cores"][0:-1,1], data["users"][0:-1,0])
     ctime=time.time()-st;
     print(e,ctime)
     

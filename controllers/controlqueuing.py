@@ -4,6 +4,7 @@ else:
     from .controller import Controller
 import casadi
 import numpy as np
+import time
 
 
 
@@ -176,8 +177,8 @@ class OPTCTRL(Controller):
         self.emodel.set_initial(t,0.0001)
         er_l1 = self.emodel.variable(rt.shape[0],1);
         
-        #self.emodel.subject_to(e>=0)
-        #self.emodel.subject_to(t>=0)
+        self.emodel.subject_to(e>=0)
+        self.emodel.subject_to(t>=0)
         self.emodel.subject_to(er_l1>=0)
         
         obj=0;
@@ -188,11 +189,16 @@ class OPTCTRL(Controller):
             obj+=er_l1[i,0];
         
         self.emodel.minimize(obj)    
-        optionsIPOPT={'print_time':False,'ipopt':{'print_level':0,'max_iter':1000}}
+        optionsIPOPT={'print_time':False,'ipopt':{'print_level':0,"max_iter":300}}
         self.emodel.solver('ipopt',optionsIPOPT) 
         
-        sol=self.emodel.solve()
-        return sol.value(e)
+        try:
+            sol=self.emodel.solve()
+            return sol.value(e)
+        except Exception:
+            return None
+            
+        
     
     def addRtSample(self, rt, u, c):
         if(len(self.rtSamples) >= self.esrimationWindow):
@@ -240,9 +246,12 @@ class OPTCTRL(Controller):
         
         # i problemi di stima si possono parallelizzare
         for app in range(len(rt)):
-            self.stime[app] = self.estimate(np.array(self.rtSamples), 
+            stime = self.estimate(np.array(self.rtSamples), 
                                                       np.array(self.cSamples),
                                                       np.array(self.userSamples))
+            if(stime is not None):
+                self.stime[app]=stime
+                
         print(self.stime)
         
         # risolvo il problema di controllo ottimo
@@ -272,7 +281,19 @@ class OPTCTRL(Controller):
         return super().__str__() + " OPTCTRL: %.2f, l: %.2f h: %.2f " % (self.step, self.l, self.h)
     
 if __name__ == '__main__':
-    ctrl=OPTCTRL(period=1, init_cores=1, min_cores=0.1, max_cores=1000, st=1)
-    S=ctrl.OPTController([0.08], [0.25*0.7], [55])
-    print(S)
+    # S=ctrl.OPTController([0.08], [0.25*0.7], [55])
+    # print(S)
+    import scipy.io as sio
+    import numpy as np
+    
+    ctrl=OPTCTRL(period=1, init_cores=1, min_cores=0.1, max_cores=300, st=1)
+    data=sio.loadmat("test_data.mat")
+    #estimator=QNEstimaator();
+    #print(data["RtLine"][:,1],data["cores"][:,1],data["users"][:,0])
+    st=time.time()
+    e=ctrl.estimate(data["RtLine"][0:15,1],data["cores"][0:15,1], data["users"][0:15,0])
+    ctime=time.time()-st;
+    print(e,ctime)
+    
+    
         
