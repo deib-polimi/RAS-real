@@ -273,6 +273,6 @@ class OPTCTRL(Controller):
     
 if __name__ == '__main__':
     ctrl=OPTCTRL(period=1, init_cores=1, min_cores=0.1, max_cores=1000, st=1)
-    S=ctrl.OPTController([0.08], [0.08], [50])
+    S=ctrl.OPTController([0.08], [0.25*0.7], [55])
     print(S)
         
