@@ -151,13 +151,6 @@ class OPTCTRL(Controller):
             # self.model.solver('osqp',{'print_time':False,'error_on_fail':False})
             optionsIPOPT={'print_time':False,'ipopt':{'print_level':0,"max_iter":500}}
             self.model.solver('ipopt',optionsIPOPT) 
-        
-            try:
-                sol=self.emodel.solve()
-                return sol.value(e)
-            except Exception:
-                return None
-            
             
             try:
                 sol = self.model.solve()
