@@ -28,7 +28,7 @@ CONFIG = {
         "params" : {
             "period" : 1, 
             "init_cores" : 1, 
-            "min_cores" : 0.1,
+            "min_cores" : 1,
             "max_cores" : 25,
             "st" :0.7
         }
