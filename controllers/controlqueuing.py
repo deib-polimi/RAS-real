@@ -5,6 +5,7 @@ else:
 import casadi
 import numpy as np
 import time
+import multiprocessing
 
 
 
@@ -252,7 +253,7 @@ class OPTCTRL(Controller):
             # stime = self.estimate(np.array(self.rtSamples), 
             #                                           np.array(self.cSamples),
             #                                           np.array(self.userSamples))
-            stime=0.09
+            stime=0.1
             if(stime is not None):
                 self.stime[app]=stime
                 
