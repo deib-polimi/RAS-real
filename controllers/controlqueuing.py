@@ -10,7 +10,7 @@ import time
 
 class OPTCTRL(Controller):
     
-    esrimationWindow = 10;
+    esrimationWindow = 20;
     rtSamples = None
     cSamples = None
     userSamples = None
