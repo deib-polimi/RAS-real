@@ -151,7 +151,7 @@ class OPTCTRL(Controller):
             self.model.minimize(0.7*obj+0.3*sSum/self.max_cores)    
             # self.model.solver('osqp',{'print_time':False,'error_on_fail':False})
             optionsIPOPT={'print_time':False,'ipopt':{'print_level':0,"max_iter":500}}
-            self.model.solver('ipopt',optionsIPOPT) 
+            self.model.solver('ipopt') 
             
             try:
                 sol = self.model.solve()
