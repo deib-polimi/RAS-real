@@ -147,7 +147,7 @@ class OPTCTRL(Controller):
                 
             self.model.subject_to(sSum <= self.max_cores)
         
-            self.model.minimize(obj+0.0*sSum)    
+            self.model.minimize(obj+0.001*sSum)    
             optionsIPOPT = {'print_time':False, 'ipopt':{'print_level':0}}
             # self.model.solver('osqp',{'print_time':False,'error_on_fail':False})
             self.model.solver('ipopt', optionsIPOPT) 
@@ -189,7 +189,7 @@ class OPTCTRL(Controller):
             obj+=er_l1[i,0];
         
         self.emodel.minimize(obj)    
-        optionsIPOPT={'print_time':False,'ipopt':{'print_level':0,"max_iter":300}}
+        optionsIPOPT={'print_time':False,'ipopt':{'print_level':0,"max_iter":1000}}
         self.emodel.solver('ipopt',optionsIPOPT) 
         
         try:
@@ -260,7 +260,7 @@ class OPTCTRL(Controller):
         
         print(rt,users, cores)
         #if(t>self.esrimationWindow):
-        self.cores =max(self.OPTController(self.stime, self.setpoint, users)+0.1*self.Ik, self.min_cores)
+        self.cores =max(self.OPTController(self.stime, self.setpoint, users)+0.0*self.Ik, self.min_cores)
         #else:
         #    self.cores=users[0]
     
