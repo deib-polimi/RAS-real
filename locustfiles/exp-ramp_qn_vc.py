@@ -1,5 +1,5 @@
 CONFIG = {
-     "hosts" : ["http://localhost:8080", "http://localhost:8081"],
+    "hosts" : ["http://localhost:8080", "http://localhost:8081"],
     "containerIds" : ["dynamic_set", "dynamic_quota"],
     "request" : {
         "method" : "POST",
