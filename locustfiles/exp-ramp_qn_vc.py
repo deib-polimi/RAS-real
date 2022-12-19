@@ -18,9 +18,9 @@ CONFIG = {
         "class" : "RampGen",
         "params" : {
             "slope": 0.0833,
-            "steady" : 600,
+            "steady" : 530,
             "initial" : 2,
-            "rampstart" : 100
+            "rampstart" : 30
         }
     },
     "controller" : {
@@ -29,7 +29,7 @@ CONFIG = {
             "period" : 1, 
             "init_cores" : 1, 
             "min_cores" : 1,
-            "max_cores" : 25,
+            "max_cores" : 15,
             "st" :0.7
         }
     }
