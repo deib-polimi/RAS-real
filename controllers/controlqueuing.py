@@ -176,8 +176,8 @@ class OPTCTRL(Controller):
         self.emodel.set_initial(t,0.0001)
         er_l1 = self.emodel.variable(rt.shape[0],1);
         
-        self.emodel.subject_to(e>=0)
-        self.emodel.subject_to(t>=0)
+        #self.emodel.subject_to(e>=0)
+        #self.emodel.subject_to(t>=0)
         self.emodel.subject_to(er_l1>=0)
         
         obj=0;
