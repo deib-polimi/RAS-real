@@ -1,6 +1,6 @@
 import os
 
-graph = False
+graph = True
 root_dir = 'experiments'
 workloads = ["sin", "ramp", "tweet", "wiki"]
 transforms_wl = [("SinGen", "SN3"), ("RampGen", "RP3"), ("TweetGen", "TW2"), ("WikiGen", "WK")]
