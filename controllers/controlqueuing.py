@@ -1,7 +1,10 @@
-from .controller import Controller
+if __name__ == '__main__':
+    from controller import Controller
+else:
+    from .controller import Controller
 import casadi
 import numpy as np
-from estimator import QNEstimaator
+
 
 
 class OPTCTRL(Controller):
@@ -16,7 +19,7 @@ class OPTCTRL(Controller):
         if(not isinstance(stime, list)):
             self.stime = [stime]
         self.generator = None
-        self.estimator = QNEstimaator()
+        #self.estimator = QNEstimaator()
         self.rtSamples = [[]]
         self.cSamples = [[]]
         self.userSamples = [[]]
@@ -56,47 +59,101 @@ class OPTCTRL(Controller):
     #     sol = optCTRL.getBestSol()
     #     return [sol[S[i]] for i in range(nApp)]
     
-    def OPTController(self, e, tgt, C, maxCore):
+    # def OPTController(self, e, tgt, C, maxCore):
+    #     #print("stime:=", e, "tgt:=", tgt, "user:=", C)
+    #     if(np.sum(C)>0):
+    #         self.model = casadi.Opti() 
+    #         nApp = len(tgt)
+    #
+    #         T = self.model.variable(1, nApp);
+    #         S = self.model.variable(1, nApp);
+    #         E_l1 = self.model.variable(1, nApp);
+    #
+    #         self.model.subject_to(T >= 0)
+    #         self.model.subject_to(self.model.bounded(0, S, maxCore))
+    #         self.model.subject_to(E_l1 >= 0)
+    #
+    #         sSum = 0
+    #         obj = 0;
+    #         for i in range(nApp):
+    #             sSum += S[0, i]
+    #             # obj+=E_l1[0,i]
+    #             obj += (T[0, i] / C[i] - 1.0 / tgt[i]) ** 2
+    #
+    #        # self.model.subject_to(sSum <= maxCore)
+    #
+    #         for i in range(nApp):
+    #             # optCTRL.addCons(T[i] <= S[i] / e[i])
+    #             # optCTRL.addCons(T[i] <= C[i] / e[i])
+    #             # optCTRL.addCons(T[i] >= S[i] / e[i] - C[i] / e[i] * D[i])
+    #             # optCTRL.addCons(T[i] >= C[i] / e[i] - C[i] / e[i] * (1 - D[i]))
+    #             # optCTRL.addCons(E_l1[i] >= ((C[i]/T[i])-tgt[i]))
+    #             # optCTRL.addCons(E_l1[i] >= -((C[i]/T[i])-tgt[i]))
+    #             self.model.subject_to(T[0, i] == casadi.fmin(S[0, i] / e[i], C[i] / e[i]))
+    #
+    #         # self.model.subject_to((E_l1[0,i]+tgt[i])>=((C[i]/T[0,i])))
+    #         # self.model.subject_to((E_l1[0,i]-tgt[i])>=-((C[i]/T[0,i])))
+    #
+    #         self.model.minimize(obj)    
+    #         optionsIPOPT = {'print_time':False, 'ipopt':{'print_level':0}}
+    #         # self.model.solver('osqp',{'print_time':False,'error_on_fail':False})
+    #         self.model.solver('ipopt', optionsIPOPT) 
+    #
+    #         sol = self.model.solve()
+    #         if(nApp==1):
+    #             return sol.value(S)
+    #         else:
+    #             return sol.value(S).tolist()
+    #     else:
+    #         return 10**(-3)
+    #
+    #     # optCTRL.optimize()
+    #     # sol = optCTRL.getBestSol()
+    #     # return [sol[S[i]] for i in range(nApp)]
+    
+    def OPTController(self, e, tgt, C):
         #print("stime:=", e, "tgt:=", tgt, "user:=", C)
         if(np.sum(C)>0):
             self.model = casadi.Opti() 
             nApp = len(tgt)
             
             T = self.model.variable(1, nApp);
+            self.model.set_initial(T,0.0001)
             S = self.model.variable(1, nApp);
+            self.model.set_initial(T,0.0001)
             E_l1 = self.model.variable(1, nApp);
             
-            self.model.subject_to(T >= 0)
-            self.model.subject_to(self.model.bounded(0, S, maxCore))
             self.model.subject_to(E_l1 >= 0)
-        
+            self.model.subject_to(T >= 0)
+            self.model.subject_to(self.model.bounded(self.min_cores, S, self.max_cores))
+            
+            
+            
+            for i in range(nApp):
+                #Ti=min(C/(1+e),s/e)
+                self.model.subject_to(T[0, i] == casadi.fmin(C[i] / (1.0+e[i]),S[0, i] / e[i]))
+                
+                self.model.subject_to(E_l1[0,i]>=((C[i]/T[0,i])-(tgt[i]+1)))
+                self.model.subject_to((E_l1[0,i])>=-((C[i]/T[0,i])-(tgt[i]+1)))
+            
             sSum = 0
             obj = 0;
             for i in range(nApp):
                 sSum += S[0, i]
-                # obj+=E_l1[0,i]
-                obj += (T[0, i] / C[i] - 1.0 / tgt[i]) ** 2
-            
-           # self.model.subject_to(sSum <= maxCore)
-        
-            for i in range(nApp):
-                # optCTRL.addCons(T[i] <= S[i] / e[i])
-                # optCTRL.addCons(T[i] <= C[i] / e[i])
-                # optCTRL.addCons(T[i] >= S[i] / e[i] - C[i] / e[i] * D[i])
-                # optCTRL.addCons(T[i] >= C[i] / e[i] - C[i] / e[i] * (1 - D[i]))
-                # optCTRL.addCons(E_l1[i] >= ((C[i]/T[i])-tgt[i]))
-                # optCTRL.addCons(E_l1[i] >= -((C[i]/T[i])-tgt[i]))
-                self.model.subject_to(T[0, i] == casadi.fmin(S[0, i] / e[i], C[i] / e[i]))
+                obj += E_l1[0,i]
+                #obj += (T[0, i] / C[i] - 1.0 / tgt[i]) ** 2
+                #obj+=(C[i]/T[0, i]-(tgt[i]+1.0))** 2;
                 
-            # self.model.subject_to((E_l1[0,i]+tgt[i])>=((C[i]/T[0,i])))
-            # self.model.subject_to((E_l1[0,i]-tgt[i])>=-((C[i]/T[0,i])))
+            self.model.subject_to(sSum <= self.max_cores)
         
-            self.model.minimize(obj)    
+            self.model.minimize(obj+0.0*sSum)    
             optionsIPOPT = {'print_time':False, 'ipopt':{'print_level':0}}
             # self.model.solver('osqp',{'print_time':False,'error_on_fail':False})
             self.model.solver('ipopt', optionsIPOPT) 
             
+            
             sol = self.model.solve()
+            print(sol.value(T),sol.value(obj),sol.value(E_l1),C[0])
             if(nApp==1):
                 return sol.value(S)
             else:
@@ -107,6 +164,35 @@ class OPTCTRL(Controller):
         # optCTRL.optimize()
         # sol = optCTRL.getBestSol()
         # return [sol[S[i]] for i in range(nApp)]
+    
+    def estimate(self,rt,s,c):
+        self.emodel = casadi.Opti()
+        #Ti=min(C/(1+e),s/e)
+        
+        e = self.emodel.variable(1,1);
+        self.emodel.set_initial(e,0.0001)
+        
+        t = self.emodel.variable(rt.shape[0],1);
+        self.emodel.set_initial(t,0.0001)
+        er_l1 = self.emodel.variable(rt.shape[0],1);
+        
+        self.emodel.subject_to(e>=0)
+        self.emodel.subject_to(t>=0)
+        self.emodel.subject_to(er_l1>=0)
+        
+        obj=0;
+        for i in range(rt.shape[0]):
+            self.emodel.subject_to(t[i,0]==casadi.fmin(c[i]/(1+e),s[i]/e))
+            self.emodel.subject_to(er_l1[i,0]>=(c[i]/t[i,0]-(rt[i]+1)))
+            self.emodel.subject_to(er_l1[i,0]>=-(c[i]/t[i,0]-(rt[i]+1)))
+            obj+=er_l1[i,0];
+        
+        self.emodel.minimize(obj)    
+        optionsIPOPT={'print_time':False,'ipopt':{'print_level':0}}
+        self.emodel.solver('ipopt',optionsIPOPT) 
+        
+        sol=self.emodel.solve()
+        return sol.value(e)
     
     def addRtSample(self, rt, u, c):
         if(len(self.rtSamples) >= self.esrimationWindow):
@@ -145,7 +231,7 @@ class OPTCTRL(Controller):
             cores = [cores]
         
         #cerco di stimare il throughput, cosi da stimare il numero di utenti e il rispettivo tempo di servizio
-        print("ncmp",len(np.array(self.monitoring.getAllRTs())),"t",t)
+        #print("ncmp",len(np.array(self.monitoring.getAllRTs())),"t",t)
         self.addRtSample(np.maximum(rt,[0]), users, cores)
         
         # mRt = np.array(self.rtSamples).mean(axis=0)
@@ -154,10 +240,9 @@ class OPTCTRL(Controller):
         
         # i problemi di stima si possono parallelizzare
         for app in range(len(rt)):
-            self.stime[app] = self.estimator.estimate(np.array(self.rtSamples), 
+            self.stime[app] = self.estimate(np.array(self.rtSamples), 
                                                       np.array(self.cSamples),
                                                       np.array(self.userSamples))
-        
         print(self.stime)
         
         # risolvo il problema di controllo ottimo
@@ -166,7 +251,7 @@ class OPTCTRL(Controller):
         
         print(rt,users, cores)
         #if(t>self.esrimationWindow):
-        self.cores =max(self.OPTController(self.stime, self.setpoint, users, self.max_cores)+0.1*self.Ik, self.min_cores)
+        self.cores =max(self.OPTController(self.stime, self.setpoint, users)+0.1*self.Ik, self.min_cores)
         #else:
         #    self.cores=users[0]
     
@@ -185,3 +270,9 @@ class OPTCTRL(Controller):
     
     def __str__(self):
         return super().__str__() + " OPTCTRL: %.2f, l: %.2f h: %.2f " % (self.step, self.l, self.h)
+    
+if __name__ == '__main__':
+    ctrl=OPTCTRL(period=1, init_cores=1, min_cores=0.1, max_cores=1000, st=1)
+    S=ctrl.OPTController([0.08], [0.08], [50])
+    print(S)
+        
