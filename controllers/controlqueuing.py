@@ -162,6 +162,7 @@ class OPTCTRL(Controller):
                     return sol.value(S).tolist()
                 
             except Exception:
+                print("error")
                 return self.cores
         else:
             return 10**(-3)
@@ -265,7 +266,7 @@ class OPTCTRL(Controller):
         
         #print(rt,users, cores)
         #if(t>self.esrimationWindow):
-        self.cores =max(self.OPTController(self.stime, self.setpoint, users)+0.0*self.Ik, self.min_cores)
+        self.cores=max(self.OPTController(self.stime, self.setpoint, users)+0.0*self.Ik, self.min_cores)
         #else:
         #    self.cores=users[0]
     
