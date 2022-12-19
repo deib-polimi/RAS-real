@@ -188,7 +188,7 @@ class OPTCTRL(Controller):
             obj+=er_l1[i,0];
         
         self.emodel.minimize(obj)    
-        optionsIPOPT={'print_time':False,'ipopt':{'print_level':0}}
+        optionsIPOPT={'print_time':False,'ipopt':{'print_level':0,'max_iter':1000}}
         self.emodel.solver('ipopt',optionsIPOPT) 
         
         sol=self.emodel.solve()
