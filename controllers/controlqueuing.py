@@ -249,11 +249,10 @@ class OPTCTRL(Controller):
         
         # i problemi di stima si possono parallelizzare
         for app in range(len(rt)):
-            #stime = self.estimate(np.array(self.rtSamples), 
-            #                                          np.array(self.cSamples),
-            #                                          np.array(self.userSamples))
-            
-            stime=0.09
+            stime = self.estimate(np.array(self.rtSamples), 
+                                                      np.array(self.cSamples),
+                                                      np.array(self.userSamples))
+            #stime=0.09
             if(stime is not None):
                 self.stime[app]=stime
                 
