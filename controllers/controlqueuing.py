@@ -126,7 +126,7 @@ class OPTCTRL(Controller):
             
             self.model.subject_to(E_l1 >= 0)
             self.model.subject_to(T >= 0)
-            self.model.subject_to(self.model.bounded(0, S, self.max_cores))
+            self.model.subject_to(self.model.bounded(self.min_cores, S, self.max_cores))
             
             
             
@@ -147,7 +147,7 @@ class OPTCTRL(Controller):
                 
             self.model.subject_to(sSum <= self.max_cores)
         
-            self.model.minimize(obj+0.000000*sSum)    
+            self.model.minimize(obj)    
             optionsIPOPT = {'print_time':False, 'ipopt':{'print_level':0}}
             # self.model.solver('osqp',{'print_time':False,'error_on_fail':False})
             self.model.solver('ipopt', optionsIPOPT) 
