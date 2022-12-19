@@ -19,7 +19,7 @@ CONFIG = {
         "params" : {
             "slope": 0,
             "steady" : 0,
-            "initial" : 10,
+            "initial" : 20,
             "rampstart" : 1000
         }
     },
