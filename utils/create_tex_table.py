@@ -5,7 +5,7 @@ graph = sys.argv[1] == "True"
 root_dir = 'experiments'
 workloads = ["sin", "ramp", "tweet", "wiki"]
 transforms_wl = [("SinGen", "SN3"), ("RampGen", "RP3"), ("TweetGen", "TW2"), ("WikiGen", "WK")]
-controllers = ["static", "rule-", "rule3", "step", "target-", "targetfast", "ct"]
+controllers = ["static", "rule-", "rule3", "step", "target-", "targetfast", "ct", "qn"]
 transforms_cnt = [ 
     ("StaticController", "Static (1)"), 
     ("RBControllerWithCooldown", "Rule-based"),
@@ -13,7 +13,8 @@ transforms_cnt = [
     ("StepController", "Step"),
     ("TargetController", "Target"),
     ("TargetController", "TargetFast"),
-    ("CTControllerScaleX", "ScaleX")    
+    ("CTControllerScaleX", "ScaleX"),
+    ("OPTCTRL", "OPTCTRL")    
     ] 
 
 
