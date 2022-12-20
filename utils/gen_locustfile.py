@@ -4,22 +4,31 @@ import re
 directory = "./locustfiles"
 
 replace_content = [
-  ("dynamic_set", "graph_set"), 
-  ("dynamic_quota", "graph_quota"),
-  ("/function/dynamic_html", "/function/graph_mst"),
-  (r'"data"\s*:\s*{.*?}', '"data" : { "size" : 25000 }')
+  (r'"controller"\s*:\s*\{[^}]*}[^}]*}', '''"controller" : {
+        "class" : "OPTCTRL",
+        "params" : {
+            "period" : 1, 
+            "init_cores" : 1, 
+            "min_cores" : 0.5,
+            "max_cores" : 16,
+            "st" : 0.7
+        }
+    }''')
   ]
 
-replace_name = "aws", "aws-graph"
+filematches = ["ct", "aws"]
+replace_name = ("ct", "qn")
 
 
 for filename in os.listdir(directory):
-  if filename.endswith(".py") and replace_name[0] in filename:
+  if filename.endswith(".py") and all(match in filename for match in filematches):
     with open(os.path.join(directory, filename), "r") as f:
       contents = f.read()
+  
     for c in replace_content:
-      contents = re.sub(*c, contents)
+      contents = re.sub(*c, contents, flags=re.DOTALL)
     
     new_filename = filename.replace(*replace_name)
     with open(os.path.join(directory, new_filename), "w") as f:
       f.write(contents)
+    

@@ -1,40 +1,38 @@
 CONFIG = {
     "hosts" : ["http://localhost:8080", "http://localhost:8081"],
-    "containerIds" : ["20e2d5004d48", "9b5431de6ba9"],
+    "containerIds" : ["dynamic_set", "dynamic_quota"],
     "request" : {
         "method" : "POST",
-        "data" : {"size": 15000},
+        "data" : { "username": "dragonbanana", "random_len": 80000},
         "headers" : {"Content-Type": "application/json"},
-        "path" : "/function/graph_bfs"
+        "path" : "/function/dynamic_html"
     },
-    "cpu_range_start" : 2,
+    "cpu_range_start" : 0,
     "monitoring_window": 30,
-    "app_sla": 0.15,
+    "app_sla": 0.25,
     "wait_time_min": 1,
     "wait_time_max": 1,
     "spawn_rate": 1,
-    "end" : 240,
+    "end" : 600,
     "generator" : {
-        "class" : "RampGen",
+        "class" : "WikiGen",
         "params" : {
-            "slope": 0.25,
-            "steady" : 120,
-            "initial" : 1
+        	"bias": 40,
+            "shift": 10,
         }
     },
     "controller" : {
-        "class" : "CTControllerScaleX",
+        "class" : "OPTCTRL",
         "params" : {
-            "period" : 5, 
+            "period" : 1, 
             "init_cores" : 1, 
-            "min_cores" : 1.0,
-            "max_cores" : 15,
-            "BC" : 25, 
-            "DC" : 50, 
-            "st" :0.8
+            "min_cores" : 0.5,
+            "max_cores" : 16,
+            "st" : 0.7
         }
     }
 }
+
 
 EXP_NAME = __file__.split("/")[-1].split(".")[0]
 
