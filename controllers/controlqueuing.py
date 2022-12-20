@@ -8,7 +8,7 @@ import time
 
 class OPTCTRL(Controller):
     
-    esrimationWindow = 20;
+    esrimationWindow = 30;
     rtSamples = None
     cSamples = None
     userSamples = None
@@ -145,7 +145,7 @@ class OPTCTRL(Controller):
             return 10**(-3)
     
     def estimate(self,rt,s,c):
-        self.model = casadi.Opti()
+        self.model = casadi.Opti("conic")
         #Ti=min(C/(1+e),s/e)
         e = self.model.variable(1,1);
         self.model.set_initial(e,0.000001)
@@ -160,7 +160,7 @@ class OPTCTRL(Controller):
         
         self.model.minimize(obj)    
         optionsIPOPT={'print_time':False,'ipopt':{'print_level':0}}
-        self.model.solver('ipopt',optionsIPOPT) 
+        self.model.solver('osqp',{'print_time':False,'osqp':{'verbose':0}}) 
         
         sol=self.model.solve()
         return sol.value(e)
