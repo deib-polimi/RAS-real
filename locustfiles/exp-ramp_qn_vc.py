@@ -17,10 +17,10 @@ CONFIG = {
     "generator" : {
         "class" : "RampGen",
         "params" : {
-            "slope": 0,
-            "steady" : 0,
-            "initial" : 30,
-            "rampstart" : 1000
+            "slope": 0.15,
+            "steady" : 450,
+            "initial" : 10,
+            "rampstart" : 150
         }
     },
     "controller" : {

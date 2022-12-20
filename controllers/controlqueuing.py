@@ -136,7 +136,7 @@ class OPTCTRL(Controller):
             self.model.solver('osqp',optionsOSQP) 
         
             sol = self.model.solve()
-            print(C[0]/sol.value(T),sol.value(obj),tgt)
+            #print(C[0]/sol.value(T),sol.value(obj),tgt)
             if(nApp==1):
                 return sol.value(S)
             else:
