@@ -5,9 +5,6 @@ else:
 import casadi
 import numpy as np
 import time
-import multiprocessing
-
-
 
 class OPTCTRL(Controller):
     
@@ -116,92 +113,57 @@ class OPTCTRL(Controller):
     def OPTController(self, e, tgt, C):
         #print("stime:=", e, "tgt:=", tgt, "user:=", C)
         if(np.sum(C)>0):
-            self.model = casadi.Opti() 
+            self.model = casadi.Opti("conic") 
             nApp = len(tgt)
             
             T = self.model.variable(1, nApp);
-            self.model.set_initial(T,0.0001)
             S = self.model.variable(1, nApp);
-            self.model.set_initial(T,0.0001)
-            E_l1 = self.model.variable(1, nApp);
-            
-            self.model.subject_to(E_l1 >= 0)
+
             self.model.subject_to(T >= 0)
             self.model.subject_to(self.model.bounded(self.min_cores, S, self.max_cores))
             
-            
-            
+            obj=0;
             for i in range(nApp):
-                #Ti=min(C/(1+e),s/e)
-                self.model.subject_to(T[0, i] == casadi.fmin(C[i] / (1.0+e[i]),S[0, i] / e[i]))
-                
-                self.model.subject_to(E_l1[0,i]>=((C[i]/T[0,i])-(tgt[i]+1)))
-                self.model.subject_to((E_l1[0,i])>=-((C[i]/T[0,i])-(tgt[i]+1)))
-            
-            sSum = 0
-            obj = 0;
-            for i in range(nApp):
-                sSum += S[0, i]
-                obj += E_l1[0,i]
-                #obj += (T[0, i] / C[i] - 1.0 / tgt[i]) ** 2
-                #obj+=(C[i]/T[0, i]-(tgt[i]+1.0))** 2;
-                
-            self.model.subject_to(sSum <= self.max_cores)
+                #self.model.subject_to(T[0, i] == casadi.fmin(C[i] / (1.0+e[i]),S[0, i] / e[i]))
+                self.model.subject_to(T[0, i]<= C[i] / (1.0+e[i]))
+                self.model.subject_to(T[0, i]<= S[0, i] / e[i])
+                obj+=(C[i]-(1+tgt[i])*T[0, i])**2+0.000000*S[0, i]
         
-            self.model.minimize(0.7*obj+0.3*sSum/self.max_cores)    
+            self.model.minimize(obj)    
             # self.model.solver('osqp',{'print_time':False,'error_on_fail':False})
-            optionsIPOPT={'print_time':False,'ipopt':{'print_level':0,"max_iter":500}}
-            self.model.solver('ipopt') 
-            
-            try:
-                sol = self.model.solve()
-                print(sol.value(T),sol.value(obj),sol.value(E_l1),C[0])
-                if(nApp==1):
-                    return sol.value(S)
-                else:
-                    return sol.value(S).tolist()
-                
-            except Exception:
-                print("error")
-                return self.cores
+            optionsIPOPT={'print_time':False,'ipopt':{'print_level':0}}
+            optionsOSQP={'print_time':False,'osqp':{'verbose':0}}
+            self.model.solver('osqp',optionsOSQP) 
+        
+            sol = self.model.solve()
+            print(C[0]/sol.value(T),sol.value(obj),tgt)
+            if(nApp==1):
+                return sol.value(S)
+            else:
+                return sol.value(S).tolist()
         else:
             return 10**(-3)
-        
-        # optCTRL.optimize()
-        # sol = optCTRL.getBestSol()
-        # return [sol[S[i]] for i in range(nApp)]
     
     def estimate(self,rt,s,c):
-        self.emodel = casadi.Opti()
+        self.model = casadi.Opti()
         #Ti=min(C/(1+e),s/e)
-        
-        e = self.emodel.variable(1,1);
-        self.emodel.set_initial(e,0.0001)
-        
-        t = self.emodel.variable(rt.shape[0],1);
-        self.emodel.set_initial(t,0.0001)
-        er_l1 = self.emodel.variable(rt.shape[0],1);
-        
-        self.emodel.subject_to(e>=0)
-        self.emodel.subject_to(t>=0)
-        self.emodel.subject_to(er_l1>=0)
+        e = self.model.variable(1,1);
+        self.model.set_initial(e,0.000001)
+        t = self.model.variable(rt.shape[0],1);
+        self.model.subject_to(e>=0)
+        self.model.subject_to(t>=0)
         
         obj=0;
         for i in range(rt.shape[0]):
-            self.emodel.subject_to(t[i,0]==casadi.fmin(c[i]/(1+e),s[i]/e))
-            self.emodel.subject_to(er_l1[i,0]>=(c[i]/t[i,0]-(rt[i]+1)))
-            self.emodel.subject_to(er_l1[i,0]>=-(c[i]/t[i,0]-(rt[i]+1)))
-            obj+=er_l1[i,0];
+            self.model.subject_to(t[i,0]==casadi.fmin(c[i]/(1+e),s[i]/e))
+            obj+=(c[i]-(rt[i]+1)*t[i,0])**2;
         
-        self.emodel.minimize(obj)    
-        optionsIPOPT={'print_time':False,'ipopt':{'print_level':0,"max_iter":1000}}
-        self.emodel.solver('ipopt',optionsIPOPT) 
+        self.model.minimize(obj)    
+        optionsIPOPT={'print_time':False,'ipopt':{'print_level':0}}
+        self.model.solver('ipopt',optionsIPOPT) 
         
-        try:
-            sol=self.emodel.solve()
-            return sol.value(e)
-        except Exception:
-            return None
+        sol=self.model.solve()
+        return sol.value(e)
             
         
     
@@ -297,9 +259,13 @@ if __name__ == '__main__':
     #estimator=QNEstimaator();
     #print(data["RtLine"][:,1],data["cores"][:,1],data["users"][:,0])
     st=time.time()
-    e=ctrl.estimate(data["RtLine"][0:15,1],data["cores"][0:15,1], data["users"][0:15,0])
+    e=ctrl.estimate(data["RtLine"][0:-1,1],data["cores"][0:-1,1], data["users"][0:-1,0])
     ctime=time.time()-st;
     print(e,ctime)
+    
+    s=ctrl.OPTController([e], [e], [100])
+    print(s)
+    
     
     
         
