@@ -3,7 +3,7 @@ CONFIG = {
     "containerIds" : ["dynamic_set", "dynamic_quota"],
     "request" : {
         "method" : "POST",
-        "data" : { "username": "dragonbanana", "random_len": 25000},
+        "data" : { "username": "dragonbanana", "random_len": 80000},
         "headers" : {"Content-Type": "application/json"},
         "path" : "/function/dynamic_html"
     },
