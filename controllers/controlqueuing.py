@@ -215,7 +215,7 @@ class OPTCTRL(Controller):
         for app in range(len(rt)):
             stime = self.estimate(np.array(self.rtSamples), 
                                                       np.array(self.cSamples),
-                                                      np.array(self.userSamples))
+                                                      np.array(self.userSamples)) 
             if(stime is not None):
                 self.stime[app]=stime
                 
