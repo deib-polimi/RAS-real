@@ -13,7 +13,7 @@ CONFIG = {
     "wait_time_min": 1,
     "wait_time_max": 1,
     "spawn_rate": 1,
-    "end" : 250,
+    "end" : 600,
     "generator" : {
         "class" : "WikiGen",
         "params" : {
