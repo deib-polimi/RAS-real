@@ -7,10 +7,11 @@ class CTControllerScaleX(Controller):
         super().__init__(period, init_cores, min_cores, max_cores, st=st)
         self.BC = BC
         self.DC = DC
+        self.old_cores = self.init_cores
 
     def reset(self):
         super().reset()
-        self.xc_prec = 0
+        self.xc_prec = 0.0
 
     def control(self, t):
         rt = self.monitoring.getRT()
@@ -18,12 +19,15 @@ class CTControllerScaleX(Controller):
             return self.init_cores
 
         e = 1/self.setpoint - 1/rt
-        xc = float(self.xc_prec + self.BC * e)
-        oldcores = self.cores
-        self.cores = min(min(max(max(self.min_cores, oldcores/MAX_SCALE_OUT_TIMES), xc + self.DC * e), oldcores*MAX_SCALE_OUT_TIMES), self.max_cores)
+        intg = float(self.xc_prec + self.BC * e)
+        prop = float(self.DC * e)
+        cores = intg + prop
+        max_cores = min(self.max_cores, self.old_cores/MAX_SCALE_OUT_TIMES)
+        self.cores = float(min(max(cores, self.min_cores), max_cores))
         if t < 20 and self.cores < self.init_cores:
-            self.cores = self.init_cores
-        self.xc_prec = float(self.cores - self.DC * e)
+            self.cores = float(self.init_cores)
+        self.xc_prec = float(self.xc_prec + (intg-self.xcprec)*self.cores/cores)
+        self.old_cores = self.cores
 
     def __str__(self):
         return super().__str__() + " BC: %.2f DC: %.2f " % (self.BC, self.DC)
