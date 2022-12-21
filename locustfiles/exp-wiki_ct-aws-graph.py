@@ -13,7 +13,7 @@ CONFIG = {
     "wait_time_min": 1,
     "wait_time_max": 1,
     "spawn_rate": 1,
-    "end" : 600,
+    "end" : 250,
     "generator" : {
         "class" : "WikiGen",
         "params" : {
@@ -24,12 +24,12 @@ CONFIG = {
     "controller" : {
         "class" : "CTControllerScaleX",
         "params" : {
-            "period" : 1, 
+            "period" : 5, 
             "init_cores" : 1, 
             "min_cores" : 0.5,
             "max_cores" : 16,
             "BC" : 0.15, 
-            "DC" : 0.32, 
+            "DC" : 0.15, 
             "st" : 0.7
         }
     }
