@@ -8,6 +8,7 @@ class CTControllerScaleX(Controller):
         self.BC = BC
         self.DC = DC
         self.old_cores = self.init_cores
+        self.xc_prec = 0
 
     def reset(self):
         super().reset()
@@ -28,6 +29,7 @@ class CTControllerScaleX(Controller):
             self.cores = float(self.init_cores)
         self.xc_prec = float(self.xc_prec + (intg-self.xcprec)*self.cores/cores)
         self.old_cores = self.cores
+        print("cores: ", self.cores, "c_cores", cores, "intg", intg, "prop", prop, "xc_prec", self.xc_prec)
 
     def __str__(self):
         return super().__str__() + " BC: %.2f DC: %.2f " % (self.BC, self.DC)
