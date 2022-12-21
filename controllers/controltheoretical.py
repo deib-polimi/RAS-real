@@ -21,10 +21,9 @@ class CTControllerScaleX(Controller):
         xc = float(self.xc_prec + self.BC * e)
         oldcores = self.cores
         self.cores = min(min(max(max(self.min_cores, oldcores/MAX_SCALE_OUT_TIMES), xc + self.DC * e), oldcores*MAX_SCALE_OUT_TIMES), self.max_cores)
-	if t < 10 and self.cores < self.init_cores:
+        if t < 10 and self.cores < self.init_cores:
 	    self.cores = self.init_cores
         self.xc_prec = float(self.cores - self.DC * e)
-    
 
     def __str__(self):
         return super().__str__() + " BC: %.2f DC: %.2f " % (self.BC, self.DC)
