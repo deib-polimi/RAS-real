@@ -1,6 +1,6 @@
 from .controller import Controller
 
-MAX_SCALE_OUT_TIMES = 3
+MAX_SCALE_OUT_TIMES = 100
 
 class CTControllerScaleX(Controller):
     def __init__(self, period, init_cores, min_cores, max_cores, BC=0.5, DC=0.95, st=0.8):
