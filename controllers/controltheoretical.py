@@ -27,7 +27,7 @@ class CTControllerScaleX(Controller):
         self.cores = float(min(max(cores, self.min_cores), max_cores))
         if t < 20 and self.cores < self.init_cores:
             self.cores = float(self.init_cores)
-        self.xc_prec = float(self.xc_prec + (intg-self.xc_prec)*self.cores/cores)
+        self.xc_prec = intg
         self.old_cores = self.cores
         print("cores: ", self.cores, "c_cores", cores, "intg", intg, "prop", prop, "xc_prec", self.xc_prec)
 
