@@ -19,7 +19,7 @@ class CTControllerScaleX(Controller):
         if rt == 0:
             return self.init_cores
 
-        e = 1/self.setpoint - 1/rt
+        e = self.setpoint - rt
         intg = float(self.xc_prec + self.BC * e)
         prop = float(self.DC * e)
         cores = intg + prop
