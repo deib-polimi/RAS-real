@@ -28,7 +28,7 @@ CONFIG = {
             "init_cores" : 2, 
             "min_cores" : 0.5,
             "max_cores" : 16,
-            "BC" : 0.18, 
+            "BC" : 0.22, 
             "DC" :  0.11, 
             "st" : 0.7
         }
