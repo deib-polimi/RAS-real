@@ -31,7 +31,7 @@ def saveMat():
     aviolations = monitoring.getViolations()
     atimes = monitoring.getAllTimes()
     ausers = monitoring.getAllUsers()
-    
+
     if not isinstance(aviolations, list):
         arts = [arts]
         acores = [acores]
@@ -40,7 +40,7 @@ def saveMat():
         ausers=[ausers]
 
     for (time, rts, cores, violations, users) in zip(atimes, arts, acores, aviolations,ausers):
-        mdic = {"time": time, "rts": rts,"cores":cores,"violations":violations,"users":users}    
+        mdic = {"time": time, "rts": rts,"cores":cores,"violations":violations, "users":users}      
         savemat(f"{output_path}/data.mat", mdic)
 
 def logTeX():
