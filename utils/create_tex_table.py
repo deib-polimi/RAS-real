@@ -13,8 +13,8 @@ transforms_cnt = [
     ("StepController", "Step"),
     ("TargetController", "Target"),
     ("TargetController", "TargetFast"),
-    ("CTControllerScaleX", "ScaleX"),
-    ("OPTCTRL", "OPTCTRL")    
+    ("CTControllerScaleX", "\\approachCT"),
+    ("OPTCTRL", "\\approachOPT")    
     ] 
 
 
