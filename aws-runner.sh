@@ -16,7 +16,7 @@ CPUS=$3
 for i in $(seq 1 $N)
 do
   git pull --rebase
-  echo $CPU_RANGE
+  echo $CPUS
   echo $FILE
   taskset -c $CPUS locust --headless -f $FILE
   git add -A
