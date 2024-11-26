@@ -231,7 +231,7 @@ class OPTCTRLROBUST(Controller):
         if(t>0):
             self.Ik+=rt[0]-self.setpoint[0]
         
-        self.noise.append(self.cmpNoise(core=self.cores,users=self.generator.f(t),st=self.stime[0],rtm=mRt[-1]))
+        self.noise.append(self.cmpNoise(core=self.cores,users=self.generator.f(t),st=self.stime[0],rtm=rt[0]))
         np95=np.percentile(self.noise.arr,95)
         
         #print(rt,users, cores)
