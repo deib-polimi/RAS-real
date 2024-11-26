@@ -1,10 +1,9 @@
-if __name__ == '__main__':
-    from controller import Controller
-else:
-    from .controller import Controller
+
+from .controller import Controller
 import casadi
 import numpy as np
 import time
+from .circular import CircularArray
 
 class OPTCTRLROBUST(Controller):
     
