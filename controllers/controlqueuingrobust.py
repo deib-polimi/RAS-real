@@ -191,7 +191,7 @@ class OPTCTRLROBUST(Controller):
         pred=users/(core/st)
         noise=rtm-pred
         #print(f"###pred={pred}; noise={noise};")
-        return max(noise,0)
+        return max(noise/pred,0)
         
     def control(self, t):
         rt = self.monitoring.getRT()
@@ -233,11 +233,12 @@ class OPTCTRLROBUST(Controller):
         
         self.noise.append(self.cmpNoise(core=self.cores,users=self.generator.f(t),st=self.stime[0],rtm=rt[0]))
         np95=np.percentile(self.noise.arr,95)
+        self.stime[0]=self.stime[0]*(1+np95*1.5)
         
         #print(rt,users, cores)
         #if(t>self.esrimationWindow):
         #self.cores=max(self.OPTController(self.stime, self.setpoint, users)+0.0001*self.Ik, self.min_cores)
-        self.cores=max(self.OPTController(self.stime+np95, self.setpoint, users)+0.0001*self.Ik, self.min_cores)
+        self.cores=max(self.OPTController(self.stime, self.setpoint, users), self.min_cores)
         #else:
         #    self.cores=users[0]
     
