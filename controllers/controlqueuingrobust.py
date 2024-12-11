@@ -225,7 +225,7 @@ class OPTCTRLROBUST(Controller):
             if(stime is not None):
                 self.stime[app]=stime
                 
-        print(self.stime)
+        #print(self.stime)
         
         # risolvo il problema di controllo ottimo
         if(t>0):
@@ -234,6 +234,8 @@ class OPTCTRLROBUST(Controller):
         self.noise.append(self.cmpNoise(core=self.cores,users=self.generator.f(t),st=self.stime[0],rtm=rt[0]))
         np95=np.percentile(self.noise.arr,95)
         self.stime[0]=self.stime[0]*(1+np95*1.05)
+
+        print(f"###np95 {np95}")
         
         #print(rt,users, cores)
         #if(t>self.esrimationWindow):
