@@ -235,6 +235,7 @@ class OPTCTRLROBUST(Controller):
         
         self.noise.append(self.cmpNoise(core=self.cores,users=self.generator.f(t),st=self.stime[0],rtm=rt[0]))
         np99=np.percentile(self.noise.arr,99)
+        print(self.stime[0],self.stime[0]*(1.0+np99))
         self.stime[0]=self.stime[0]*(1+np99)
 
         print(f"###np95 {np99}")
