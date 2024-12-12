@@ -8,7 +8,7 @@ CONFIG = {
         "path" : "/function/dynamic_html"
     },
     "cpu_range_start" : 0,
-    "monitoring_window": 5,
+    "monitoring_window": 30,
     "app_sla": 0.25,
     "wait_time_min": 1,
     "wait_time_max": 1,
