@@ -22,7 +22,7 @@ class OPTCTRLROBUST(Controller):
         self.cSamples = [[]]
         self.userSamples = [[]]
         self.Ik=0
-        self.noise=CircularArray(size=100)
+        self.noise=CircularArray(size=200)
     
     # def OPTController(self,e, tgt, C,maxCore):
     #     optCTRL = Model() 
