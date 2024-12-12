@@ -189,11 +189,14 @@ class OPTCTRLROBUST(Controller):
 
     def cmpNoise(self,core=None,users=None,st=None,rtm=None):
         print(f"## core={core},users={users},st={st},rtm={rtm}")
+        #modelnoise
         Tpred=min([users/(1.0+st),core/st])
         pred=(users/Tpred)-1.0
         noise=rtm-pred
+        #workload prediction noise
+        noisectrl=rtm-self.sla*self.setpoint
         print(f"###pred={pred}; noise={noise};")
-        return max(noise/pred,0)
+        return max(max(noise,noisectrl)/pred,0)
         
     def control(self, t):
         rt = self.monitoring.getRT()
