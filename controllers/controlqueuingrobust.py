@@ -194,7 +194,7 @@ class OPTCTRLROBUST(Controller):
         pred=(users/Tpred)-1.0
         noise=rtm-pred
         #workload prediction noise
-        noisectrl=rtm-self.sla*self.setpoint
+        noisectrl=rtm-self.sla[0]*self.setpoint[0]
         print(f"###pred={pred}; noise={noise};")
         return max(max(noise,noisectrl)/pred,0)
         
