@@ -189,8 +189,10 @@ class OPTCTRLROBUST(Controller):
 
     def cmpNoise(self,core=None,users=None,st=None,rtm=None):
         print(f"## core={core},users={users},st={st},rtm={rtm}")
-        Tpred=min(users/(1.0+st),core/st)
+        Tpred=min([users/(1.0+st),core/st])
         pred=(users/Tpred)
+        if([users/(1.0+st),core/st].index(Tpred)==0)
+            pred-=1
         noise=rtm-pred
         print(f"###pred={pred}; noise={noise};")
         return max(noise/pred,0)
