@@ -243,7 +243,7 @@ class OPTCTRLROBUST(Controller):
                 self.Ik.append(der[-1])
         
         up95=0
-        if(len(self.Ik.arr)>0)        
+        if(len(self.Ik.arr)>0):        
             up95=np.percentile(self.Ik.arr,95)
 
         np95=np.percentile(self.noise.arr,95)
