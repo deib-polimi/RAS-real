@@ -215,7 +215,6 @@ class OPTCTRLROBUST(Controller):
         #cerco di stimare il throughput, cosi da stimare il numero di utenti e il rispettivo tempo di servizio
         #print("ncmp",len(np.array(self.monitoring.getAllRTs())),"t",t)
         self.addRtSample(np.maximum(rt,[0]), users, cores)
-        print("gradient:",np.percentile(np.gradient(np.array(self.userSamples))),95)
         
         # mRt = np.array(self.rtSamples).mean(axis=0)
         # mCores = np.array(self.cSamples).mean(axis=0)
@@ -238,6 +237,9 @@ class OPTCTRLROBUST(Controller):
         ny=self.cmpNoise(core=self.cores,users=self.generator.f(t),st=self.stime[0],rtm=rt[0])
         if(ny>0):
             self.noise.append(ny)
+
+        if(len(self.userSamples)>self.esrimationWindow):
+            print("gradient:",np.percentile(np.gradient(np.array(self.userSamples))),95)
         
         np99=np.percentile(self.noise.arr,99)
         up99=np.percentile(self.Ik.arr,99)
@@ -245,7 +247,7 @@ class OPTCTRLROBUST(Controller):
         print(f"###p95 {np99},{up99}")
 
         #self.cores=max(self.OPTController(self.stime, self.setpoint, users)+0.0001*self.Ik, self.min_cores)
-        self.cores=max(self.OPTController(self.stime, self.setpoint, users)+up99, self.min_cores)
+        self.cores=max(self.OPTController(self.stime, self.setpoint, users), self.min_cores)
     
     def reset(self):
         super().reset()
