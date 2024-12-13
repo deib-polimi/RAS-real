@@ -236,8 +236,9 @@ class OPTCTRLROBUST(Controller):
         if(ny>0):
             self.noise.append(ny)
 
-        up99=0
+        up99=0.0
         if(len(self.userSamples)>3):
+            print(np.gradient(np.array(self.userSamples)))
             if(np.gradient(np.array(self.userSamples))[-1]>0):
                 self.Ik.append(np.gradient(np.array(self.userSamples))[-1])
                 up99=np.percentile(self.Ik.arr,99)
