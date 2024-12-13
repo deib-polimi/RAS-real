@@ -22,7 +22,7 @@ class OPTCTRLROBUST(Controller):
         self.cSamples = [[]]
         self.userSamples = [[]]
         self.Ik=0
-        self.noise=CircularArray(size=200)
+        self.noise=CircularArray(size=100)
     
     # def OPTController(self,e, tgt, C,maxCore):
     #     optCTRL = Model() 
@@ -193,10 +193,8 @@ class OPTCTRLROBUST(Controller):
         Tpred=min([users/(1.0+st),core/st])
         pred=(users/Tpred)-1.0
         noise=rtm-pred
-        #workload prediction noise
-        noisectrl=rtm-self.sla[0]*self.setpoint[0]
         print(f"###pred={pred}; noise={noise};")
-        return max(max(noise,noisectrl)/pred,0)
+        return max(noise/pred,0)
         
     def control(self, t):
         rt = self.monitoring.getRT()
@@ -240,17 +238,11 @@ class OPTCTRLROBUST(Controller):
         if(ny>0):
             self.noise.append(ny)
         np95=np.percentile(self.noise.arr,95)
-        print(self.stime[0],self.stime[0]*(1.0+np95))
         self.stime[0]=self.stime[0]*(1.0+np95)
-
         print(f"###np95 {np95}")
-        
-        #print(rt,users, cores)
-        #if(t>self.esrimationWindow):
+
         #self.cores=max(self.OPTController(self.stime, self.setpoint, users)+0.0001*self.Ik, self.min_cores)
-        self.cores=max(self.OPTController(self.stime, self.setpoint, users), self.min_cores)
-        #else:
-        #    self.cores=users[0]
+        self.cores=max(self.OPTController(self.stime, self.setpoint, users)+0.0001*self.Ik, self.min_cores)
     
     def reset(self):
         super().reset()
