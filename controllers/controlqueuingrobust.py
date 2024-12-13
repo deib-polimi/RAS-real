@@ -238,9 +238,9 @@ class OPTCTRLROBUST(Controller):
 
         up99=0
         if(len(self.userSamples)>3):
-            if(np.gradient(np.array(self.userSamples))[-1]>0)
-            self.Ik.append(np.gradient(np.array(self.userSamples))[-1])
-            up99=np.percentile(self.Ik.arr,99)
+            if(np.gradient(np.array(self.userSamples))[-1]>0):
+                self.Ik.append(np.gradient(np.array(self.userSamples))[-1])
+                up99=np.percentile(self.Ik.arr,99)
         
         np99=np.percentile(self.noise.arr,99)
         self.stime[0]=self.stime[0]*(1.0+np99)
