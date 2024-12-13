@@ -248,7 +248,8 @@ class OPTCTRLROBUST(Controller):
         print(f"###p95 {np99},{up99}")
 
         #self.cores=max(self.OPTController(self.stime, self.setpoint, users)+0.0001*self.Ik, self.min_cores)
-        self.cores=max(self.OPTController(self.stime, self.setpoint, users[0]+up99), self.min_cores)
+        users[0]+=up99
+        self.cores=max(self.OPTController(self.stime, self.setpoint, users), self.min_cores)
     
     def reset(self):
         super().reset()
