@@ -236,24 +236,23 @@ class OPTCTRLROBUST(Controller):
         if(ny>0):
             self.noise.append(ny)
 
-        der=0
         if(np.array(self.userSamples).shape[0]>2):
-            der=np.mean(np.gradient(np.array(self.userSamples)[:,0]))
+            der=np.gradient(np.array(self.userSamples)[:,0])
             #print("gradient",der[-1])
-            #if(der[-1]>0):
-            #    self.Ik.append(der[-1])
+            if(der[-1]>0):
+                self.Ik.append(der[-1])
         
-        #up95=0
-        #if(len(self.Ik.arr)>0):        
-        #    up95=np.percentile(self.Ik.arr,95)
+        up95=0
+        if(len(self.Ik.arr)>0):        
+            up95=np.percentile(self.Ik.arr,95)
 
         np95=np.percentile(self.noise.arr,95)
         self.stime[0]=self.stime[0]*(1.0+np95)
 
-        print(f"###p95 {np95},{der}")
+        print(f"###p95 {np95},{up95}")
 
         #self.cores=max(self.OPTController(self.stime, self.setpoint, users)+0.0001*self.Ik, self.min_cores)
-        users[0]+=der
+        users[0]+=up95
         self.cores=max(self.OPTController(self.stime, self.setpoint, users), self.min_cores)
     
     def reset(self):
