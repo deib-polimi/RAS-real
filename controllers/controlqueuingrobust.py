@@ -21,8 +21,8 @@ class OPTCTRLROBUST(Controller):
         self.rtSamples = [[]]
         self.cSamples = [[]]
         self.userSamples = [[]]
-        self.Ik=CircularArray(size=100)
-        self.noise=CircularArray(size=100)
+        self.Ik=CircularArray(size=200)
+        self.noise=CircularArray(size=200)
     
     # def OPTController(self,e, tgt, C,maxCore):
     #     optCTRL = Model() 
@@ -238,13 +238,13 @@ class OPTCTRLROBUST(Controller):
         if(ny>0):
             self.noise.append(ny)
         
-        np95=np.percentile(self.noise.arr,95)
-        up95=np.percentile(self.Ik.arr,95)
-        self.stime[0]=self.stime[0]*(1.0+np95)
-        print(f"###p95 {np95},{up95}")
+        np99=np.percentile(self.noise.arr,99)
+        up99=np.percentile(self.Ik.arr,99)
+        self.stime[0]=self.stime[0]*(1.0+np99)
+        print(f"###p95 {np99},{up99}")
 
         #self.cores=max(self.OPTController(self.stime, self.setpoint, users)+0.0001*self.Ik, self.min_cores)
-        self.cores=max(self.OPTController(self.stime, self.setpoint, users+up95), self.min_cores)
+        self.cores=max(self.OPTController(self.stime, self.setpoint, users)+0.1*up99, self.min_cores)
     
     def reset(self):
         super().reset()
