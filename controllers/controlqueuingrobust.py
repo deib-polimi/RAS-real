@@ -245,10 +245,10 @@ class OPTCTRLROBUST(Controller):
         
         np99=np.percentile(self.noise.arr,99)
         self.stime[0]=self.stime[0]*(1.0+np99)
-        print(f"###p95 {np99},{up99},{users}")
+        print(f"###p95 {np99},{up99}")
 
         #self.cores=max(self.OPTController(self.stime, self.setpoint, users)+0.0001*self.Ik, self.min_cores)
-        self.cores=max(self.OPTController(self.stime, self.setpoint, users+up99), self.min_cores)
+        self.cores=max(self.OPTController(self.stime, self.setpoint, users[0]+up99), self.min_cores)
     
     def reset(self):
         super().reset()
