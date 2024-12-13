@@ -239,7 +239,7 @@ class OPTCTRLROBUST(Controller):
             self.noise.append(ny)
         
         np95=np.percentile(self.noise.arr,95)
-        up95=np.percentile(self.Ik,95)
+        up95=np.percentile(self.Ik.arr,95)
         self.stime[0]=self.stime[0]*(1.0+np95)
         print(f"###p95 {np95},{up95}")
 
