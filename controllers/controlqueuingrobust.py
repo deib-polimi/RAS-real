@@ -7,7 +7,7 @@ from .circular import CircularArray
 
 class OPTCTRLROBUST(Controller):
     
-    esrimationWindow = 30;
+    estimationWindow = 30;
     rtSamples = None
     cSamples = None
     userSamples = None
@@ -168,7 +168,7 @@ class OPTCTRLROBUST(Controller):
         
     
     def addRtSample(self, rt, u, c):
-        if(len(self.rtSamples) >= self.esrimationWindow):
+        if(len(self.rtSamples) >= self.estimationWindow):
             # print("rolling",rt, u, c)
             # print(self.cSamples)
             self.rtSamples = np.roll(self.rtSamples, [-1, 0], 0)
@@ -227,27 +227,27 @@ class OPTCTRLROBUST(Controller):
                                                       np.array(self.userSamples)) 
             if(stime is not None):
                 self.stime[app]=stime
-                
-        #print(self.stime)
         
-        if(t>0 and rt[0]-self.setpoint[0]>0):
-            self.Ik.append(rt[0]-self.setpoint[0])
+        #if(t>0 and rt[0]-self.setpoint[0]>0):
+        #    self.Ik.append(rt[0]-self.setpoint[0])
 
         
         ny=self.cmpNoise(core=self.cores,users=self.generator.f(t),st=self.stime[0],rtm=rt[0])
         if(ny>0):
             self.noise.append(ny)
 
-        if(len(self.userSamples)>self.esrimationWindow):
-            print("gradient:",np.percentile(np.gradient(np.array(self.userSamples))),95)
+        up99=0
+        if(len(self.userSamples)>3):
+            if(np.gradient(np.array(self.userSamples))[-1]>0)
+            self.Ik.append(np.gradient(np.array(self.userSamples))[-1])
+            up99=np.percentile(self.Ik.arr,99)
         
         np99=np.percentile(self.noise.arr,99)
-        up99=np.percentile(self.Ik.arr,99)
         self.stime[0]=self.stime[0]*(1.0+np99)
         print(f"###p95 {np99},{up99}")
 
         #self.cores=max(self.OPTController(self.stime, self.setpoint, users)+0.0001*self.Ik, self.min_cores)
-        self.cores=max(self.OPTController(self.stime, self.setpoint, users), self.min_cores)
+        self.cores=max(self.OPTController(self.stime, self.setpoint, users+up99), self.min_cores)
     
     def reset(self):
         super().reset()
