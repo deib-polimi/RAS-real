@@ -8,33 +8,32 @@ CONFIG = {
         "path" : "/function/graph_mst"
     },
     "cpu_range_start" : 0,
-    "monitoring_window": 30,
+    "monitoring_window": 1,
     "app_sla": 0.25,
     "wait_time_min": 1,
     "wait_time_max": 1,
     "spawn_rate": 1,
     "end" : 600,
     "generator" : {
-        "class" : "TweetGen",
+        "class" : "RampGen",
         "params" : {
-        	"bias": 40,
-            "shift": 10,
+            "slope": 0.15,
+            "steady" : 450,
+            "initial" : 10,
+            "rampstart" : 150
         }
     },
     "controller" : {
-        "class" : "CTControllerScaleX",
+        "class" : "OPTCTRLROBUST",
         "params" : {
-            "period" : 5, 
-            "init_cores" : 2, 
+            "period" : 1, 
+            "init_cores" : 1, 
             "min_cores" : 0.5,
             "max_cores" : 16,
-            "BC" : 0.15, 
-            "DC" :  0.25, 
-            "st" : 1.0
+            "st" : 1
         }
     }
 }
-
 
 EXP_NAME = __file__.split("/")[-1].split(".")[0]
 

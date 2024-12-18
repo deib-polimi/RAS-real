@@ -29,7 +29,7 @@ CONFIG = {
             "init_cores" : 1, 
             "min_cores" : 0.5,
             "max_cores" : 16,
-            "st" : 1.0
+            "st" : 1.0 
         }
     }
 }
