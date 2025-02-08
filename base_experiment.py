@@ -38,7 +38,9 @@ def setup(exp_name, data):
     controller.setSLA(appSla)
     request = data["request"]
     cpu_range_start = data["cpu_range_start"]
-    request_maker.setup(monitoring, controller, data["hosts"], request["method"], request["headers"], request["data"], request["path"])
+    request_maker.setup(monitoring, controller, data["hosts"], request["method"], 
+                        request["headers"], request["data"], request["path"],
+                        data["noise_start"],data["noise_scale"])
     controller_loop.setup(controller, data["containerIds"], cpu_range_start)
     printer.setup(monitoring, generator, controller, exp_name, data)
     

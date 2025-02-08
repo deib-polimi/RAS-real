@@ -58,5 +58,5 @@ for workload, transform_wl in zip(workloads, transforms_wl):
         formatted_values = ['{:.2f}'.format(x) if isinstance(x, float) else str(x) for x in average_values]        
         res += prefix +' & '.join(formatted_values) + postfix + "\n"
 
-with open("table-dynamic_robust.tex" if not graph else "table-graph.tex", "w+") as f:
+with open("table-dynamic_robust.tex" if not graph else "table-graph_robust.tex", "w+") as f:
     f.write(res)
