@@ -37,7 +37,6 @@ def addNoise(rt,t):
     noise = gauss(0, monitoring.sla * noise_scale)
     if  noise_start !=None and t >= noise_start:
         rt+=noise
-        print("noise",noise)
     return rt
 
 
