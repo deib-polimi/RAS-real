@@ -1,7 +1,7 @@
 import time
 from locust import events
 from locust.runners import WorkerRunner
-from random import random
+from random import random, gauss
 import controller_loop
 
 env = None
@@ -34,7 +34,7 @@ def setup(_monitoring, _controller, _hosts, _method, _headers, _data, _path,_noi
     noise_scale = _noise_scale
 
 def addNoise(rt,t):
-    noise = random.gauss(0, monitoring.sla * noise_scale)
+    noise = gauss(0, monitoring.sla * noise_scale)
     if  noise_start !=None and t >= noise_start:
         rt+=noise
     return rt
