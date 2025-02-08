@@ -34,9 +34,11 @@ def setup(_monitoring, _controller, _hosts, _method, _headers, _data, _path,_noi
     noise_scale = _noise_scale
 
 def addNoise(rt,t):
+    print("no noise",rt,t)
     noise = gauss(0, monitoring.sla * noise_scale)
     if  noise_start !=None and t >= noise_start:
         rt+=noise
+    print("with noise",rt)
     return rt
 
 
