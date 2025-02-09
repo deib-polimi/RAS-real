@@ -13,9 +13,9 @@ CONFIG = {
     "wait_time_min": 1,
     "wait_time_max": 1,
     "spawn_rate": 1,
-    "end" : 600,
+    "end" : 1200,
     "noise_start":300,
-    "noise_scale":0.50,
+    "noise_scale":1.0,
     "generator" : {
         "class" : "RampGen",
         "params" : {
