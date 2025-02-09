@@ -1,12 +1,44 @@
 import os
 import sys
+import argparse
+import re
+from pathlib import Path
 
-graph = sys.argv[1] == "True"
-root_dir = './experiments/robust_exp/'
-workloads = ["sin", "ramp", "tweet", "wiki"]
+global graph, root_dir, outfile
+
+def parse_args():
+    parser = argparse.ArgumentParser(description='Parse command line arguments.')
+    parser.add_argument('--graph', action='store_true', help='Boolean flag to indicate if graph is enabled')
+    parser.add_argument('--root_dir', type=str, required=True, help='Path to the root directory')
+    parser.add_argument('--outfile', type=str, required=True, help='Path to the output file')
+    
+    args = parser.parse_args()
+    return args.graph, args.root_dir, args.outfile
+
+def get_workloads_and_controllers(root_dir):
+    workloads = set()
+    controllers = set()
+    pattern = re.compile(r'exp-(?P<workload>[^_]+)_(?P<ctrl>[^-]+)-aws-graph-\d+')
+
+    for filename in os.listdir(root_dir):
+        match = pattern.match(filename)
+        if match:
+            workloads.add(match.group('workload'))
+            controllers.add(match.group('ctrl'))
+
+    return list(workloads), list(controllers)
+
+graph, root_dir, outfile = parse_args()
+workloads, controllers = get_workloads_and_controllers(root_dir)
+print("Workloads:", workloads)
+print("Controllers:", controllers)
+
+#graph = sys.argv[1] == "True"
+#root_dir = './experiments/robust_exp2/'
+#workloads = ["sin"]
 transforms_wl = [("SinGen", "SN3"), ("RampGen", "RP3"), ("TweetGen", "TW2"), ("WikiGen", "WK")]
 #controllers = ["static", "rule-", "rule3", "step", "target-", "targetfast", "ct", "qn"]
-controllers = ["ct", "qn","robust"]
+#controllers = ["ct", "qn","robust"]
 # transforms_cnt = [ 
 #     ("StaticController", "Static (1)"), 
 #     ("RBControllerWithCooldown", "Rule-based"),
@@ -58,5 +90,5 @@ for workload, transform_wl in zip(workloads, transforms_wl):
         formatted_values = ['{:.2f}'.format(x) if isinstance(x, float) else str(x) for x in average_values]        
         res += prefix +' & '.join(formatted_values) + postfix + "\n"
 
-with open("table-dynamic_robust.tex" if not graph else "table-graph_robust.tex", "w+") as f:
-    f.write(res)
+Path(outfile).write_text(res)
+
