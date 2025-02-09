@@ -8,12 +8,14 @@ CONFIG = {
         "path" : "/function/graph_mst"
     },
     "cpu_range_start" : 0,
-    "monitoring_window": 1,
+    "monitoring_window": 30,
     "app_sla": 0.25,
     "wait_time_min": 1,
     "wait_time_max": 1,
     "spawn_rate": 1,
     "end" : 600,
+    "noise_start":300,
+    "noise_scale":2.0,
     "generator" : {
         "class" : "WikiGen",
         "params" : {
@@ -28,7 +30,7 @@ CONFIG = {
             "init_cores" : 1, 
             "min_cores" : 0.5,
             "max_cores" : 16,
-            "st" : 1.0
+            "st" : 0.8
         }
     }
 }
