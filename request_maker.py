@@ -37,7 +37,7 @@ def addNoiseToSize(data, t):
     if t >= noise_start:
         original_size = data["size"]
         noise = gauss(0, original_size * noise_scale)
-        data["size"] += noise
+        data["size"] += int(noise)
         if data["size"] < 100:
             data["size"] = 100
     return data
@@ -62,9 +62,7 @@ def run(task):
         #task.client.post(host+path, json=data, headers=headers)
 
         json_data = data.copy()
-        print(json_data)
         json_data = addNoiseToSize(json_data, t)
-        print(json_data)
         task.client.post(host + path, json=json_data, headers=headers)
     end = time.time()
 
