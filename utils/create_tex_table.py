@@ -26,7 +26,13 @@ def get_workloads_and_controllers(root_dir):
             workloads.add(match.group('workload'))
             controllers.add(match.group('ctrl'))
 
-    return list(workloads), list(controllers)
+    return sorted(list(workloads)), sorted(list(controllers))
+
+# Define a function to replace only full words
+def replace_full_words(text, replacements):
+    for old, new in replacements.items():
+        text = re.sub(rf'\b{re.escape(old)}\b', new, text)
+    return text
 
 graph, root_dir, outfile = parse_args()
 workloads, controllers = get_workloads_and_controllers(root_dir)
@@ -36,7 +42,7 @@ print("Controllers:", controllers)
 #graph = sys.argv[1] == "True"
 #root_dir = './experiments/robust_exp2/'
 #workloads = ["sin"]
-transforms_wl = [("SinGen", "SN3"), ("RampGen", "RP3"), ("TweetGen", "TW2"), ("WikiGen", "WK")]
+transforms_wl = {"SinGen": "SN3", "RampGen":"RP3", "TweetGen":"TW2","WikiGen":"WK"}
 #controllers = ["static", "rule-", "rule3", "step", "target-", "targetfast", "ct", "qn"]
 #controllers = ["ct", "qn","robust"]
 # transforms_cnt = [ 
@@ -50,11 +56,11 @@ transforms_wl = [("SinGen", "SN3"), ("RampGen", "RP3"), ("TweetGen", "TW2"), ("W
 #     ("OPTCTRL", "\\approachOPT")    
 #     ] 
 
-transforms_cnt = [ 
-    ("CTControllerScaleX", "\\approachCT"),
-    ("OPTCTRL", "\\approachOPT"),
-    ("OPTCTRLROBUST", "ROBUST")    
-    ] 
+transforms_cnt = { 
+    "CTControllerScaleX":"\\\\approachCT",
+    "OPTCTRL":"\\\\approachOPT",
+    "OPTCTRLROBUST":"ROBUST"    
+}
 
 
 res = ""
@@ -78,7 +84,10 @@ for workload, transform_wl in zip(workloads, transforms_wl):
                                     data[0] = f"\multirow{{-{len(controllers)}}}{{*}}{{{data[0]}}}"
                                 else:
                                     data [0] = ""
-                                prefix = ' & '.join(data[0:2]).replace(*transform_wl).replace(*transform_cnt) + ' & '  
+
+                                prefix=replace_full_words(' & '.join(data[0:2]), transforms_wl)
+                                prefix=replace_full_words(prefix, transforms_cnt)+' & '
+                                #prefix = ' & '.join(data[0:2]).replace(*transform_wl).replace(*transform_cnt) + ' & '  
                             if not postfix:
                                 postfix = "\\\\"
                                 if last:
