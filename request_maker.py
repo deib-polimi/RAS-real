@@ -21,7 +21,7 @@ def on_locust_init(environment, **_kwargs):
     if not isinstance(environment.runner, WorkerRunner):
         env = environment
 
-def setup(_monitoring, _controller, _hosts, _method, _headers, _data, _path,_noise_start,_noise_scale):
+def setup(_monitoring, _controller, _hosts, _method, _headers, _data, _path, _noise_start=-1, _noise_scale=0):
     global monitoring, controller, hosts, method, data, path, headers, noise_start, noise_scale
     monitoring = _monitoring
     controller = _controller
@@ -34,7 +34,7 @@ def setup(_monitoring, _controller, _hosts, _method, _headers, _data, _path,_noi
     noise_scale = _noise_scale
 
 def addNoiseToSize(data, t):
-    if t >= noise_start:
+    if noise_start >= 0 and t >= noise_start:
         original_size = data["size"]
         noise = gauss(0, original_size * noise_scale)
         data["size"] += int(noise)
