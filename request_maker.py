@@ -40,11 +40,11 @@ def addNoiseToSize(data, t):
         original_size = data["size"]
 
         if(noise_type=="std"):
-            noise = gauss(0, original_size * noise_scale)
+            noise = gauss(0, original_size * 2*noise_scale)
         elif(noise_type=="avg"):
             noise = gauss(original_size * noise_scale,0)
         elif(noise_type=="all"):
-            noise = gauss(original_size * noise_scale,original_size * noise_scale)
+            noise = gauss(original_size * noise_scale,original_size * 2*noise_scale)
         
         data["size"] += int(noise)
         if data["size"] < 100:
