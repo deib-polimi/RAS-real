@@ -14,6 +14,7 @@ path = None
 hosts = None
 noise_start = None
 noise_scale = None
+noise_type = None
 
 @events.init.add_listener
 def on_locust_init(environment, **_kwargs):
@@ -21,8 +22,8 @@ def on_locust_init(environment, **_kwargs):
     if not isinstance(environment.runner, WorkerRunner):
         env = environment
 
-def setup(_monitoring, _controller, _hosts, _method, _headers, _data, _path, _noise_start=-1, _noise_scale=0):
-    global monitoring, controller, hosts, method, data, path, headers, noise_start, noise_scale
+def setup(_monitoring, _controller, _hosts, _method, _headers, _data, _path, _noise_start=-1, _noise_scale=0,_noise_type="std"):
+    global monitoring, controller, hosts, method, data, path, headers, noise_start, noise_scale, noise_type
     monitoring = _monitoring
     controller = _controller
     hosts = _hosts
@@ -32,11 +33,19 @@ def setup(_monitoring, _controller, _hosts, _method, _headers, _data, _path, _no
     headers = _headers
     noise_start = _noise_start
     noise_scale = _noise_scale
+    noise_type = _noise_type
 
 def addNoiseToSize(data, t):
     if noise_start >= 0 and t >= noise_start:
         original_size = data["size"]
-        noise = gauss(0, original_size * noise_scale)
+
+        if(noise_type=="std"):
+            noise = gauss(0, original_size * noise_scale)
+        elif(noise_type=="avg"):
+            noise = gauss(original_size * noise_scale,0)
+        elif(noise_type=="all"):
+            noise = gauss(original_size * noise_scale,original_size * noise_scale)
+        
         data["size"] += int(noise)
         if data["size"] < 100:
             data["size"] = 100

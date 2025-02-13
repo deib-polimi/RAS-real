@@ -38,13 +38,13 @@ def setup(exp_name, data):
     controller.setSLA(appSla)
     request = data["request"]
     cpu_range_start = data["cpu_range_start"]
-    if "noise_start" not in data or "noise_scale" not in data:
+    if "noise_start" not in data or "noise_scale" not in data or "noise_type" not in data:
         request_maker.setup(monitoring, controller, data["hosts"], request["method"], 
                         request["headers"], request["data"], request["path"])
     else:
         request_maker.setup(monitoring, controller, data["hosts"], request["method"], 
                         request["headers"], request["data"], request["path"],
-                        data["noise_start"],data["noise_scale"])
+                        data["noise_start"],data["noise_scale"],data["noise_type"])
         
     controller_loop.setup(controller, data["containerIds"], cpu_range_start)
     printer.setup(monitoring, generator, controller, exp_name, data)

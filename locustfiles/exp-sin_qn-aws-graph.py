@@ -16,6 +16,7 @@ CONFIG = {
     "end" : 600,
     "noise_start":300,
     "noise_scale":2.0,
+    "noise_type":"avg",
     "generator" : {
         "class" : "SinGen",
         "params" : {
