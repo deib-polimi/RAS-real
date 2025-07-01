@@ -1,5 +1,5 @@
 class Controller:
-    def __init__(self, period, init_cores, min_cores, max_cores, st=0.8):
+    def __init__(self, period, init_cores, min_cores, max_cores, st=0.8, name="Controller"):
         self.period = period
         self.init_cores = init_cores
         self.st = st

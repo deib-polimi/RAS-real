@@ -7,3 +7,5 @@ from .stepcontroller import StepController
 from .controller import Controller
 from .circular import CircularArray
 from .controlqueuingrobust import OPTCTRLROBUST
+from .ppocontroller import PPOController
+from .rlcontroller import RLController

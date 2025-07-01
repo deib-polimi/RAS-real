@@ -7,7 +7,9 @@ from math import floor, ceil
 
 CPU_PERIOD = 100000
 cpu_range_start = None
+
 client = docker.from_env()
+
 containerSet = containerQuotas = None
 controller = None
 end = False
