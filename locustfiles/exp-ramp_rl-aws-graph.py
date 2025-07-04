@@ -1,0 +1,45 @@
+CONFIG = {
+    "hosts" : ["http://localhost:8080", "http://localhost:8081"],
+    "containerIds" : ["graph_set", "graph_quota"],
+    "request" : {
+        "method" : "POST",
+        "data" : { "size" : 25000 },
+        "headers" : {"Content-Type": "application/json"},
+        "path" : "/function/graph_mst"
+    },
+    
+    "cpu_range_start" : 0,
+    "monitoring_window": 30,
+    "app_sla": 0.25,
+    "wait_time_min": 1,
+    "wait_time_max": 1,
+    "spawn_rate": 1,
+    "end" : 600,
+    "noise_start":300,
+    "noise_scale":1.0,
+    "noise_type":"avg",
+    "generator" : {
+        "class" : "RampGen",
+        "params" : {
+            "slope": 0.15,
+            "steady" : 450,
+            "initial" : 10,
+            "rampstart" : 150
+        }
+    },
+    "controller" : {
+        "class" : "RLController",
+        "params" : {
+            "period" : 3, 
+            "init_cores" : 1, 
+            "min_cores" : 0.5,
+            "max_cores" : 16,
+            "train" : False,
+        }
+    }
+}
+
+EXP_NAME = __file__.split("/")[-1].split(".")[0]
+
+from base_experiment import *
+setup(EXP_NAME, CONFIG)
