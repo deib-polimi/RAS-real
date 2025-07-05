@@ -15,19 +15,16 @@ class GPPPOController(PPOController):
     """PPO autoscaler with GP-based compensation and PID training data generation."""
 
     # GP parameters
-    _GP_TRAIN_START = 100
-    _GP_MIN_SAMPLES = 300
-    _GP_TRAIN_FREQ = 50
     _GP_INPUT_DIM = 3  # [RL action, num_users, response_time]
-    _GP_MAX_BUFFER_SIZE = 300
-    _GP_PERCENTILE = 95  # Use 75th percentile for predictions
 
     def __init__(self, period, init_cores, *,
                  min_cores=1, max_cores=1000, st=0.8, name=None,
                  train=True, burst_mode="none", burst_threshold_q=20,
                  burst_threshold_r=30, burst_extra=4, trend_features=False,
                  enable_log=True, log_dir="./logs",
-                 kp=100, ki=0.01):
+                 kp=100, ki=0.01,
+                 gp_train_start=100, gp_min_samples=300, gp_train_freq=50,
+                 gp_max_buffer_size=300, gp_percentile=95):
                  #kp=0.5, ki=0.05):  # PID parameters
         super().__init__(period, init_cores, min_cores=min_cores,
                         max_cores=max_cores, st=st, name=name,
@@ -42,11 +39,17 @@ class GPPPOController(PPOController):
         self.kp = kp  # Proportional gain
         self.ki = ki  # Integral gain
 
+        # GP parameters
+        self.gp_train_start = gp_train_start
+        self.gp_min_samples = gp_min_samples
+        self.gp_train_freq = gp_train_freq
+        self.gp_percentile = gp_percentile
+
         # Initialize GP
         kernel = Matern(length_scale=np.ones(self._GP_INPUT_DIM), nu=2.5) + \
                 WhiteKernel(noise_level=0.1)
         self.gpr = GaussianProcessRegressor(kernel=kernel, normalize_y=True)
-        self.gp_data_buffer = deque(maxlen=self._GP_MAX_BUFFER_SIZE)
+        self.gp_data_buffer = deque(maxlen=gp_max_buffer_size)
         self.gp_train_counter = 0
 
         # Initialize PID state
@@ -84,7 +87,7 @@ class GPPPOController(PPOController):
     def _train_gp(self):
         """Train the GP model if enough data is available."""
         print(f"Training GP with {len(self.gp_data_buffer)} samples")
-        if len(self.gp_data_buffer) < self._GP_MIN_SAMPLES:
+        if len(self.gp_data_buffer) < self.gp_min_samples:
             return
 
         X = np.array([x for x, _ in self.gp_data_buffer])
@@ -107,9 +110,9 @@ class GPPPOController(PPOController):
         # Determine which percentile to use based on error direction
         error = current_rt - setpoint  # RT too high -> positive error -> add resources
         if error > 0:  # RT is too high, we want to scale up
-            percentile = self._GP_PERCENTILE  # Use lower percentile to be conservative when adding resources
+            percentile = self.gp_percentile  # Use lower percentile to be conservative when adding resources
         else:  # RT is too low, we want to scale down
-            percentile = 100 - self._GP_PERCENTILE  # Use higher percentile to be conservative when removing resources
+            percentile = 100 - self.gp_percentile  # Use higher percentile to be conservative when removing resources
         
         # Calculate the percentile value
         percentile_value = norm.ppf(percentile / 100.0, loc=mean, scale=std)
@@ -161,7 +164,7 @@ class GPPPOController(PPOController):
 
         # Get GP compensation if trained (predict compensation for current PPO action)
         gp_compensation = 0
-        if len(self.gp_data_buffer) >= self._GP_MIN_SAMPLES:
+        if len(self.gp_data_buffer) >= self.gp_min_samples:
             print(f"Predicting GP with {len(self.gp_data_buffer)} samples") 
             # Use current values to predict compensation for current PPO action
             X_pred = np.array([action_base_rl, num_users, current_rt]).reshape(1, -1)
@@ -173,7 +176,7 @@ class GPPPOController(PPOController):
         compensation_source = "None"
 
         # Phase 2: Use GP if trained and active.
-        if self.step_cnt >= self._GP_TRAIN_START and len(self.gp_data_buffer) >= self._GP_MIN_SAMPLES:
+        if self.step_cnt >= self.gp_train_start and len(self.gp_data_buffer) >= self.gp_min_samples:
             actual_compensation = max(0, gp_compensation) # GP also only compensates for under-provisioning
             compensation_source = "GP"
         # Phase 1: Use direct PID before GP is ready.
@@ -197,7 +200,7 @@ class GPPPOController(PPOController):
 
         # Update GP training counter
         self.gp_train_counter += 1
-        if self.gp_train_counter >= self._GP_TRAIN_FREQ:
+        if self.gp_train_counter >= self.gp_train_freq:
             self._train_gp()
 
         # Update state tracking
@@ -216,7 +219,7 @@ class GPPPOController(PPOController):
         # Log
         if self.enable_log:
             rt = self.monitoring.getRT()
-            gp_status = f"GP:{len(self.gp_data_buffer)}/{self._GP_MIN_SAMPLES}" if len(self.gp_data_buffer) < self._GP_MIN_SAMPLES else "GP:ACTIVE"
+            gp_status = f"GP:{len(self.gp_data_buffer)}/{self.gp_min_samples}" if len(self.gp_data_buffer) < self.gp_min_samples else "GP:ACTIVE"
             line = (f"{t:.1f}s lat={rt:.2f} cores={self.cores} "
                    f"Δ={final_delta:.2f} (RL:{action_base_rl:.2f} {compensation_source}:{actual_compensation:.2f}) "
                    f"rew={self.prev_reward:.2f} {gp_status}")

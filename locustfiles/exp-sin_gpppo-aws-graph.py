@@ -39,7 +39,12 @@ CONFIG = {
             "enable_log" : True,
             "log_dir" : "./logs",
             "kp" : 2,
-            "ki" : 10
+            "ki" : 10,
+            "gp_train_start": 100,
+            "gp_min_samples": 300,
+            "gp_train_freq": 50,
+            "gp_max_buffer_size": 300,
+            "gp_percentile": 95
         }
     }
 }
