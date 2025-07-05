@@ -1,0 +1,242 @@
+% Update the listing setup to make pseudocode more readable with better colors
+\lstset{
+    basicstyle=\ttfamily\footnotesize,
+    commentstyle=\color{green!50!black}\itshape,
+    keywordstyle=\color{blue!80!black}\bfseries,
+    stringstyle=\color{red!70!black},
+    identifierstyle=\color{black},
+    breaklines=true,
+    breakatwhitespace=true,
+    tabsize=4,
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    numbersep=5pt,
+    frame=single,
+    captionpos=b,
+    escapechar=@,
+    emphstyle=\color{orange!80!black}\bfseries,
+    emph={function, if, then, else, for, while, return, min, max},
+    morekeywords={function, min, max, return, if, then, else},
+    morecomment=[l]{\#},
+    texcl=false,
+    mathescape=false,
+    keepspaces=true,
+    columns=flexible
+}
+
+% Define a new style for function names
+\newcommand{\funcstyle}[1]{\textcolor{purple!70!black}{\textbf{#1}}}
+
+\section{Approach}
+This section describes a robust resource controller designed for cloud applications. The controller dynamically allocates computing resources to maintain application response time within specified Service Level Agreements (SLAs) even in challenging contentions such as the presence of systems noise and disruptive events.
+
+For doing so, the controller combines two key elements:
+
+\begin{enumerate}
+    \item An online-calibrated queueing network model
+    \item An adaptive component that adjusts for factors not explicitly captured by the model
+\end{enumerate}
+
+\subsection{Controller Design}
+
+The controller operates by continuously sampling response times, user loads, and core allocations within a sliding window. This historical data enables both model calibration and adaptation to changing conditions.
+
+\begin{lstlisting}[language=Python, caption={Main control loop algorithm that adaptively allocates resources based on monitored performance metrics and historical data}, label={lst:control}]
+@\label{control:line1}@function Control(t):
+@\label{control:line2}@    rt = getCurrentResponseTime()
+@\label{control:line3}@    users = getCurrentUsers()
+    
+@\label{control:line4}@    # Store samples for model calibration
+@\label{control:line5}@    addSample(rt, users, cores)
+    
+@\label{control:line6}@    # Estimate service time parameter
+@\label{control:line7}@    stime = estimateServiceTime(rtSamples, coreSamples, userSamples)
+    
+@\label{control:line8}@    # Calculate model noise and adapt
+@\label{control:line9}@    noise = computeModelNoise(cores, users, stime, rt)
+@\label{control:line10}@    storeNoise(noise)
+    
+@\label{control:line11}@    # Calculate load change gradient and store if increasing
+@\label{control:line12}@    gradient = computeLoadGradient(userSamples)
+@\label{control:line13}@    if gradient > 0 then
+@\label{control:line14}@        storeGradient(gradient)
+    
+@\label{control:line15}@    # Adapt model based on historical data
+@\label{control:line16}@    noisePercentile = calculateNoisePercentile(95)
+@\label{control:line17}@    stime = stime * (1.0 + noisePercentile)
+    
+@\label{control:line18}@    # Adjust predicted load based on historical gradients
+@\label{control:line19}@    gradientPercentile = calculateGradientPercentile(95)
+@\label{control:line20}@    users = users + gradientPercentile
+    
+@\label{control:line21}@    # Compute optimal core allocation
+@\label{control:line22}@    cores = computeOptimalCores(stime, targetRT, users)
+\end{lstlisting}
+
+The control algorithm operates in several distinct phases:
+
+\begin{itemize}
+    \item In lines \ref{control:line2}-\ref{control:line3}, the current system state is monitored by retrieving response time and user load data.
+    \item Line \ref{control:line5} adds these samples to a sliding window of historical data.
+    \item Line \ref{control:line7} estimates the service time parameter by fitting the queueing model to observed data.
+    \item Lines \ref{control:line9}-\ref{control:line10} compute and store model prediction errors.
+    \item Lines \ref{control:line12}-\ref{control:line14} track increasing workload patterns.
+    \item Lines \ref{control:line16}-\ref{control:line17} adapt the service time estimate based on the 95th percentile of historical noise.
+    \item Lines \ref{control:line19}-\ref{control:line20} adjust predicted load to account for rapid workload increases.
+    \item Lines \ref{control:line21}-\ref{control:line22} compute the optimal core allocation using the adapted model.
+\end{itemize}
+
+\subsection{Queueing Network Model}
+
+The controller dynamically calibrates a queueing network model by estimating the service time parameter from observed system behavior:
+
+\begin{lstlisting}[language=Python, caption={Service time estimation algorithm that determines the key parameter for the queueing model through optimization of historical performance data}, label={lst:estimate}]
+@\label{estimate:line1}@function EstimateServiceTime(responseTime, cores, users):
+@\label{estimate:line2}@    # Create optimization model
+@\label{estimate:line3}@    model = createOptimizationModel()
+@\label{estimate:line4}@    
+@\label{estimate:line5}@    # Define variables: e (service time) and t (throughput)
+@\label{estimate:line6}@    e = model.addVariable(1, 1)  # service time to be estimated
+@\label{estimate:line7}@    t = model.addVariable(responseTime.size, 1)  # throughput for each sample
+@\label{estimate:line8}@    
+@\label{estimate:line9}@    # Set variable constraints
+@\label{estimate:line10}@   model.addConstraint(e >= 0)  # service time must be positive
+@\label{estimate:line11}@   model.addConstraint(t >= 0)  # throughput must be positive
+@\label{estimate:line12}@    
+@\label{estimate:line13}@   # Set objective function
+@\label{estimate:line14}@   objectiveValue = 0
+@\label{estimate:line15}@   
+@\label{estimate:line16}@   # For each sample, add queueing model constraints and build objective
+@\label{estimate:line17}@   for i = 0 to responseTime.size-1:
+@\label{estimate:line18}@       # Throughput is minimum between user and core bottlenecks
+@\label{estimate:line19}@       # t = min(users/(1+e), cores/e)
+@\label{estimate:line20}@       model.addConstraint(t[i] == min(users[i]/(1+e), cores[i]/e))
+@\label{estimate:line21}@       
+@\label{estimate:line22}@       # Add squared error term to objective: (users - (rt+1)*t)²
+@\label{estimate:line23}@       error = (users[i] - (responseTime[i]+1)*t[i])²
+@\label{estimate:line24}@       objectiveValue = objectiveValue + error
+@\label{estimate:line25}@    
+@\label{estimate:line26}@   # Set optimization objective to minimize total prediction error
+@\label{estimate:line27}@   model.minimize(objectiveValue)
+@\label{estimate:line28}@   
+@\label{estimate:line29}@   # Solve optimization problem
+@\label{estimate:line30}@   solution = model.solve()
+@\label{estimate:line31}@   
+@\label{estimate:line32}@   # Return estimated service time
+@\label{estimate:line33}@   return solution.getValue(e)
+\end{lstlisting}
+
+The service time estimation is a key component of the controller that:
+
+\begin{itemize}
+    \item Creates an optimization model in lines \ref{estimate:line2}-\ref{estimate:line7} with the service time as the unknown parameter and throughput as an additional variable for each historical sample.
+    \item Sets appropriate constraints in lines \ref{estimate:line9}-\ref{estimate:line11} to ensure physical validity of the variables.
+    \item In lines \ref{estimate:line16}-\ref{estimate:line20}, applies the queueing theory relationship between throughput, users, cores, and service time. This relationship is based on Little's Law and bottleneck analysis, with throughput constrained by either the user-limited rate or the core-limited rate.
+    \item Lines \ref{estimate:line22}-\ref{estimate:line27} define an objective function that minimizes the squared prediction error across all historical samples, using the relationship derived from queueing theory.
+    \item Lines \ref{estimate:line29}-\ref{estimate:line33} solve the optimization problem to find the service time that best explains the observed system behavior.
+\end{itemize}
+
+The model computes the optimal resource allocation using a similar optimization approach:
+
+\begin{lstlisting}[language=Python, caption={Optimal core allocation algorithm that formulates and solves a constrained optimization problem to determine minimum resources needed to meet response time targets}, label={lst:optcontroller}]
+@\label{opt:line1}@function ComputeOptimalCores(serviceTime, targetRT, users):
+@\label{opt:line2}@    # Create optimization model
+@\label{opt:line3}@    model = createOptimizationModel("conic")
+@\label{opt:line4}@    nApps = users.size
+@\label{opt:line5}@    
+@\label{opt:line6}@    # Define variables: T (throughput) and S (core allocation)
+@\label{opt:line7}@    T = model.addVariable(1, nApps)  # throughput for each application
+@\label{opt:line8}@    S = model.addVariable(1, nApps)  # core allocation for each application
+@\label{opt:line9}@    
+@\label{opt:line10}@   # Set variable constraints
+@\label{opt:line11}@   model.addConstraint(T >= 0)  # throughput must be positive
+@\label{opt:line12}@   model.addConstraint(S >= minCores)  # enforce minimum cores constraint
+@\label{opt:line13}@   model.addConstraint(S <= maxCores)  # enforce maximum cores constraint
+@\label{opt:line14}@   
+@\label{opt:line15}@   # Initialize objective function
+@\label{opt:line16}@   objectiveValue = 0
+@\label{opt:line17}@   
+@\label{opt:line18}@   # For each application, add constraints and build objective
+@\label{opt:line19}@   for i = 0 to nApps-1:
+@\label{opt:line20}@       # User-limited throughput constraint: T ≤ users/(1+serviceTime)
+@\label{opt:line21}@       model.addConstraint(T[i] <= users[i]/(1+serviceTime[i]))
+@\label{opt:line22}@       
+@\label{opt:line23}@       # Core-limited throughput constraint: T ≤ cores/serviceTime
+@\label{opt:line24}@       model.addConstraint(T[i] <= S[i]/serviceTime[i])
+@\label{opt:line25}@       
+@\label{opt:line26}@       # Add squared error to objective: (users - (1+targetRT)*T)²
+@\label{opt:line27}@       # This minimizes deviation from target response time
+@\label{opt:line28}@       error = (users[i] - (1+targetRT[i])*T[i])²
+@\label{opt:line29}@       objectiveValue = objectiveValue + error
+@\label{opt:line30}@   
+@\label{opt:line31}@   # Set optimization objective
+@\label{opt:line32}@   model.minimize(objectiveValue)
+@\label{opt:line33}@   
+@\label{opt:line34}@   # Solve optimization problem
+@\label{opt:line35}@   solution = model.solve()
+@\label{opt:line36}@   
+@\label{opt:line37}@   # Return optimal core allocation
+@\label{opt:line38}@   return solution.getValue(S)
+\end{lstlisting}
+
+The optimal controller algorithm:
+
+\begin{itemize}
+    \item Creates an optimization model with throughput and core allocation as variables in lines \ref{opt:line2}-\ref{opt:line8}.
+    \item Sets appropriate constraints in lines \ref{opt:line10}-\ref{opt:line13} to ensure physical validity of the variables, including minimum and maximum core allocation limits.
+    \item In lines \ref{opt:line18}-\ref{opt:line24}, establishes the queueing theory constraints that capture the relationship between throughput, user load, service time, and core allocation:
+    \begin{itemize}
+        \item Line \ref{opt:line21} limits throughput based on users (user-limited bottleneck)
+        \item Line \ref{opt:line24} limits throughput based on allocated cores (resource-limited bottleneck)
+    \end{itemize}
+    \item Lines \ref{opt:line26}-\ref{opt:line32} define an objective function that minimizes the squared deviation from the target response time across all applications, effectively seeking the minimum resource allocation that meets the SLA targets.
+    \item Lines \ref{opt:line34}-\ref{opt:line38} solve the optimization problem to find the core allocation that best meets the target response time while minimizing resource usage.
+\end{itemize}
+
+\subsection{Adaptive Robustness Mechanism}
+
+The controller addresses two critical limitations of traditional queueing models:
+
+\begin{enumerate}
+    \item \textbf{Steady-state assumption mismatch}: Real applications rarely operate at steady-state, leading to response time variations even when averages meet SLAs.
+    \item \textbf{Simplified core-to-response relationship}: The actual relationship between computing resources and application performance is more complex than assumed by the model.
+\end{enumerate}
+
+To overcome these limitations, the controller implements an adaptive mechanism:
+
+\begin{lstlisting}[language=Python, caption={Model noise computation algorithm that quantifies the deviation between predicted and actual response times to detect unmodeled system behavior}, label={lst:noise}]
+@\label{noise:line1}@function ComputeModelNoise(cores, users, serviceTime, actualRT):
+@\label{noise:line2}@    # Calculate predicted throughput using queueing theory
+@\label{noise:line3}@    Tpred = min(users/(1+serviceTime), cores/serviceTime)
+    
+@\label{noise:line4}@    # Calculate predicted response time
+@\label{noise:line5}@    RTpred = (users/Tpred) - 1.0
+    
+@\label{noise:line6}@    # Calculate normalized model error
+@\label{noise:line7}@    noise = (actualRT - RTpred) / RTpred
+    
+@\label{noise:line8}@    # Return positive noise only (conservative approach)
+@\label{noise:line9}@    return max(noise, 0)
+\end{lstlisting}
+
+The noise computation method:
+
+\begin{itemize}
+    \item Lines \ref{noise:line2}-\ref{noise:line3} calculate the predicted throughput based on the queueing model.
+    \item Lines \ref{noise:line4}-\ref{noise:line5} convert this to a predicted response time using Little's Law.
+    \item Lines \ref{noise:line6}-\ref{noise:line7} quantify the relative error between predicted and actual response times.
+    \item Lines \ref{noise:line8}-\ref{noise:line9} return only positive deviations, ensuring a conservative approach that prioritizes SLA compliance.
+\end{itemize}
+
+\subsection{Controller Operation}
+
+The controller's robustness stems from its adaptive mechanism, which:
+
+\begin{enumerate}
+    \item Maintains a sliding window of historical data to identify patterns in model prediction errors and workload changes.
+    \item Computes the 95th percentile of observed model noise to capture worst-case scenarios without being overly affected by outliers.
+    \item Scales service time estimates proportionally to observed noise, effectively creating a safety margin that accounts for unmodeled factors.
+    \item Anticipates workload increases by analyzing user request gradients and proactively adjusting resource allocation.
+\end{enumerate}
+
+This adaptive approach enables the controller to compensate for both transient non-steady-state behavior and model inaccuracies, resulting in robust performance even when the application deviates from ideal queuing theory assumptions.

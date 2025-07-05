@@ -6,3 +6,4 @@ simpy
 casadi
 docker
 torch
+scikit-learn

@@ -9,3 +9,4 @@ from .circular import CircularArray
 from .controlqueuingrobust import OPTCTRLROBUST
 from .ppocontroller import PPOController
 from .rlcontroller import RLController
+from .gpppo_controller import GPPPOController
