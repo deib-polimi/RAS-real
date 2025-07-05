@@ -15,7 +15,7 @@ CONFIG = {
     "spawn_rate": 1,
     "end" : 1200,
     "noise_start":300,
-    "noise_scale":2.0,
+    "noise_scale":1.5,
     "noise_type":"avg",
     "generator" : {
         "class" : "SinGen",
@@ -41,7 +41,7 @@ CONFIG = {
             "kp" : 2,
             "ki" : 10,
             "gp_train_start": 100,
-            "gp_min_samples": 300,
+            "gp_min_samples": 150,
             "gp_train_freq": 50,
             "gp_max_buffer_size": 300,
             "gp_percentile": 95
