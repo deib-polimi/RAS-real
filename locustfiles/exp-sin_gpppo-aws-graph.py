@@ -33,7 +33,7 @@ CONFIG = {
             "min_cores" : 0.5,
             "max_cores" : 16,
             "st" : 0.8,
-            "train" : True,
+            "train" : False,
             "burst_mode" : "none",
             "trend_features" : False,
             "enable_log" : True,
