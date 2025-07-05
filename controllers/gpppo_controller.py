@@ -51,27 +51,33 @@ class GPPPOController(PPOController):
 
         # Initialize PID state
         self.integral_error = 0
+        
+        # Track previous step for proper PID compensation
+        self.prev_error = 0.0
+        self.prev_action_ppo = 0.0
+        self.prev_users = 0
+        self.prev_rt = 0.0
 
         # Additional logging
         if self.enable_log:
             os.makedirs(log_dir, exist_ok=True)  # Assicurarsi che la directory esista
             self.gp_log_path = os.path.join(log_dir, f"gpppo-gp-{time.time()}.log")
 
-    def _calculate_pid_compensation(self, current_rt):
-        """Calculate PID compensation based on response time error using standard PID parameters."""
+    def _calculate_pid_compensation(self):
+        """Calculate PID compensation based on PREVIOUS step error to correct PPO action effects."""
         # Gestire setpoint come lista o valore singolo (compatibilità con framework)
         setpoint = self.setpoint[0] if isinstance(self.setpoint, list) else self.setpoint
         
-        # Calculate error (same as CTControllerScaleX)
-        e = current_rt - setpoint  # RT too high -> positive error -> add resources
+        # Use PREVIOUS error to compensate for PPO action effects from t-1
+        e = self.prev_error  # Error caused by PPO action at t-1
         
-        # Update integral term
+        # Update integral term with previous error
         self.integral_error += e
         
-        # Calculate PID output
+        # Calculate PID output to compensate previous PPO action
         compensation = self.kp * e + self.ki * self.integral_error
 
-        print(f"sla: {setpoint} rt: {current_rt} e: {e} integral_error: {self.integral_error} compensation: {compensation}")
+        print(f"PID compensation: prev_error={e:.3f} integral={self.integral_error:.3f} compensation={compensation:.3f}")
         
         return compensation
 
@@ -131,34 +137,54 @@ class GPPPOController(PPOController):
         delta = max(self.min_cores - self.cores, min(delta, self.max_cores - self.cores))
         action_base_rl = delta
 
-        # Get current metrics for GP input
+        # Get current metrics
         current_rt = self.monitoring.getRT()
         num_users = self.monitoring.getUsers()
+        
+        # Calculate current error for next step
+        setpoint = self.setpoint[0] if isinstance(self.setpoint, list) else self.setpoint
+        current_error = current_rt - setpoint
 
-        # Calculate PID compensation for GP training
-        pid_compensation = self._calculate_pid_compensation(current_rt)
+        # Calculate PID compensation based on PREVIOUS step error (compensates previous PPO action)
+        pid_compensation = self._calculate_pid_compensation()
 
-        # Store data for GP training
-        gp_input = np.array([action_base_rl, num_users, current_rt])
-        print(f"GP input: {gp_input}")
-        self.gp_data_buffer.append((gp_input, pid_compensation))
+        # We only want to compensate for under-provisioning, so we only consider positive compensations.
+        if pid_compensation < 0:
+            pid_compensation = 0
 
-        # Get GP compensation if trained
+        # Store data for GP training using PREVIOUS step values (cause-effect relationship)
+        # Input: [prev_ppo_action, prev_users, prev_rt] → Output: current_pid_compensation
+        if hasattr(self, 'prev_action_ppo') and pid_compensation > 0:  # Only train GP on under-provisioning cases
+            gp_input = np.array([self.prev_action_ppo, self.prev_users, self.prev_rt])
+            print(f"GP input: {gp_input} → PID compensation: {pid_compensation:.3f}")
+            self.gp_data_buffer.append((gp_input, pid_compensation))
+
+        # Get GP compensation if trained (predict compensation for current PPO action)
         gp_compensation = 0
         if len(self.gp_data_buffer) >= self._GP_MIN_SAMPLES:
             print(f"Predicting GP with {len(self.gp_data_buffer)} samples") 
-            # Reshape input for prediction and handle single prediction
-            X_pred = gp_input.reshape(1, -1)
+            # Use current values to predict compensation for current PPO action
+            X_pred = np.array([action_base_rl, num_users, current_rt]).reshape(1, -1)
             gp_compensation = self._get_gp_prediction(X_pred, current_rt)
             print(f"GP compensation: {gp_compensation}")
 
-        if t >= self._GP_TRAIN_START:
-            final_delta = action_base_rl + gp_compensation
+        # Phased compensation: Use direct PID until GP is trained, then switch to GP.
+        actual_compensation = 0
+        compensation_source = "None"
+
+        # Phase 2: Use GP if trained and active.
+        if self.step_cnt >= self._GP_TRAIN_START and len(self.gp_data_buffer) >= self._GP_MIN_SAMPLES:
+            actual_compensation = max(0, gp_compensation) # GP also only compensates for under-provisioning
+            compensation_source = "GP"
+        # Phase 1: Use direct PID before GP is ready.
         else:
-            final_delta = action_base_rl
+            actual_compensation = pid_compensation # Already clipped at 0
+            compensation_source = "PID"
+
+        final_delta = action_base_rl + actual_compensation
 
         final_delta = max(self.min_cores - self.cores, min(final_delta, self.max_cores - self.cores))
-        print(f"Final delta: {final_delta}, action_base_rl: {action_base_rl}, gp_compensation: {gp_compensation}")
+        print(f"Final delta: {final_delta}, action_base_rl: {action_base_rl}, {compensation_source} compensation: {actual_compensation}")
         self.cores += final_delta
 
         # Update PPO training
@@ -181,12 +207,19 @@ class GPPPOController(PPOController):
         self.prev_val = val
         self.step_cnt += 1
 
+        # Update previous step values for next iteration
+        self.prev_error = current_error
+        self.prev_action_ppo = action_base_rl
+        self.prev_users = num_users
+        self.prev_rt = current_rt
+
         # Log
         if self.enable_log:
             rt = self.monitoring.getRT()
+            gp_status = f"GP:{len(self.gp_data_buffer)}/{self._GP_MIN_SAMPLES}" if len(self.gp_data_buffer) < self._GP_MIN_SAMPLES else "GP:ACTIVE"
             line = (f"{t:.1f}s lat={rt:.2f} cores={self.cores} "
-                   f"Δ={final_delta:.2f} (RL:{action_base_rl:.2f} GP:{gp_compensation:.2f}) "
-                   f"PID:{pid_compensation:.2f} rew={self.prev_reward:.2f}")
+                   f"Δ={final_delta:.2f} (RL:{action_base_rl:.2f} {compensation_source}:{actual_compensation:.2f}) "
+                   f"rew={self.prev_reward:.2f} {gp_status}")
             print(line)
             with open(self.log_path, "a") as f:
                 f.write(line + "\n")
@@ -197,6 +230,12 @@ class GPPPOController(PPOController):
         self.integral_error = 0
         self.gp_data_buffer.clear()
         self.gp_train_counter = 0
+        
+        # Reset previous step tracking
+        self.prev_error = 0.0
+        self.prev_action_ppo = 0.0
+        self.prev_users = 0
+        self.prev_rt = 0.0
 
     def set_pid_params(self, kp, ki):
         """Update PID parameters."""
