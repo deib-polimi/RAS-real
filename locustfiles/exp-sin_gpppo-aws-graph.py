@@ -1,0 +1,51 @@
+CONFIG = {
+    "hosts" : ["http://localhost:8080", "http://localhost:8081"],
+    "containerIds" : ["graph_set", "graph_quota"],
+    "request" : {
+        "method" : "POST",
+        "data" : { "size" : 25000 },
+        "headers" : {"Content-Type": "application/json"},
+        "path" : "/function/graph_mst"
+    },
+    "cpu_range_start" : 0,
+    "monitoring_window": 30,
+    "app_sla": 0.25,
+    "wait_time_min": 1,
+    "wait_time_max": 1,
+    "spawn_rate": 1,
+    "end" : 600,
+    "noise_start":300,
+    "noise_scale":1.0,
+    "noise_type":"avg",
+    "generator" : {
+        "class" : "SinGen",
+        "params" : {
+        	"period": 200,
+            "mod": 20,
+            "shift": 20
+        }
+    },
+    "controller" : {
+        "class" : "GPPPOController",
+        "params" : {
+            "period" : 1, 
+            "init_cores" : 1, 
+            "min_cores" : 0.5,
+            "max_cores" : 16,
+            "st" : 0.8,
+            "train" : True,
+            "burst_mode" : "none",
+            "trend_features" : False,
+            "enable_log" : True,
+            "log_dir" : "./logs",
+            "kp" : 2,
+            "ki" : 10
+        }
+    }
+}
+
+
+EXP_NAME = __file__.split("/")[-1].split(".")[0]
+
+from base_experiment import *
+setup(EXP_NAME, CONFIG) 
