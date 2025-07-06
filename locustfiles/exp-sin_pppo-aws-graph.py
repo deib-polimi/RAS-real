@@ -26,25 +26,14 @@ CONFIG = {
         }
     },
     "controller" : {
-        "class" : "GPPPOController",
+        "class" : "PPOController",
         "params" : {
             "period" : 1, 
             "init_cores" : 1, 
             "min_cores" : 0.5,
             "max_cores" : 16,
-            "st" : 0.8,
             "train" : False,
-            "burst_mode" : "none",
-            "trend_features" : False,
-            "enable_log" : True,
-            "log_dir" : "./logs",
-            "kp" : 10,
-            "ki" : 1,
-            "gp_train_start": 100,
-            "gp_min_samples": 150,
-            "gp_train_freq": 50,
-            "gp_max_buffer_size": 300,
-            "gp_percentile": 95
+            "enable_log": False
         }
     }
 }
