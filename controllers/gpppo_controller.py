@@ -148,6 +148,8 @@ class GPPPOController(PPOController):
         setpoint = self.setpoint[0] if isinstance(self.setpoint, list) else self.setpoint
         current_error = current_rt - setpoint
 
+        print(f"Current setpoing: {setpoint:.3f}")
+
         # Calculate PID compensation based on PREVIOUS step error (compensates previous PPO action)
         pid_compensation = self._calculate_pid_compensation()
 
