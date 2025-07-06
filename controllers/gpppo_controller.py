@@ -156,6 +156,8 @@ class GPPPOController(PPOController):
         # We only want to compensate for under-provisioning, so we only consider positive compensations.
         if pid_compensation < 0:
             pid_compensation = 0
+            if(self.integral_error < 0):
+                self.integral_error = 0
 
         # Store data for GP training using PREVIOUS step values (cause-effect relationship)
         # Input: [prev_ppo_action, prev_users, prev_rt] → Output: current_pid_compensation
