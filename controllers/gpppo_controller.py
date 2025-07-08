@@ -72,7 +72,7 @@ class GPPPOController(PPOController):
         setpoint = self.setpoint[0] if isinstance(self.setpoint, list) else self.setpoint
         
         # Use PREVIOUS error to compensate for PPO action effects from t-1
-        e = self.prev_error  # Error caused by PPO action at t-1
+        e = max(0, self.prev_error)  # Error caused by PPO action at t-1 (only positive errors hence under-provisioning)
         
         # Update integral term with previous error
         self.integral_error += e
@@ -153,12 +153,6 @@ class GPPPOController(PPOController):
         # Calculate PID compensation based on PREVIOUS step error (compensates previous PPO action)
         pid_compensation = self._calculate_pid_compensation()
 
-        # We only want to compensate for under-provisioning, so we only consider positive compensations.
-        if pid_compensation < 0:
-            pid_compensation = 0
-            if(self.integral_error < 0):
-                self.integral_error = 0
-
         # Store data for GP training using PREVIOUS step values (cause-effect relationship)
         # Input: [prev_ppo_action, prev_users, prev_rt] → Output: current_pid_compensation
         if hasattr(self, 'prev_action_ppo') and pid_compensation > 0:  # Only train GP on under-provisioning cases
@@ -181,7 +175,7 @@ class GPPPOController(PPOController):
 
         # Phase 2: Use GP if trained and active.
         if self.step_cnt >= self.gp_train_start and len(self.gp_data_buffer) >= self.gp_min_samples:
-            actual_compensation = max(0, gp_compensation) # GP also only compensates for under-provisioning
+            actual_compensation =  gp_compensation 
             compensation_source = "GP"
         # Phase 1: Use direct PID before GP is ready.
         else:
@@ -190,9 +184,11 @@ class GPPPOController(PPOController):
 
         final_delta = action_base_rl + actual_compensation
 
-        final_delta = max(self.min_cores - self.cores, min(final_delta, self.max_cores - self.cores))
-        print(f"Final delta: {final_delta}, action_base_rl: {action_base_rl}, {compensation_source} compensation: {actual_compensation}")
-        self.cores += final_delta
+        proposed_cores = self.cores + final_delta
+        proposed_cores=max(self.min_cores,min(self.max_cores,proposed_cores))
+
+        print(f"proposed_cores: {proposed_cores}, action_base_rl: {action_base_rl}, {compensation_source} compensation: {actual_compensation}")
+        self.cores = proposed_cores
 
         # Update PPO training
         if self.train and self.prev_state is not None:

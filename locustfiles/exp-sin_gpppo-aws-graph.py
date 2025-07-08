@@ -30,7 +30,7 @@ CONFIG = {
         "params" : {
             "period" : 1, 
             "init_cores" : 1, 
-            "min_cores" : 27,
+            "min_cores" : 0.5,
             "max_cores" : 28,
             "st" : 0.8,
             "train" : False,
@@ -38,10 +38,10 @@ CONFIG = {
             "trend_features" : False,
             "enable_log" : True,
             "log_dir" : "./logs",
-            "kp" : 4,
-            "ki" : 0.5,
-            "gp_train_start": 100,
-            "gp_min_samples": 150,
+            "kp" : 10,
+            "ki" : 1,
+            "gp_train_start": 1,
+            "gp_min_samples": 300,
             "gp_train_freq": 50,
             "gp_max_buffer_size": 300,
             "gp_percentile": 95
