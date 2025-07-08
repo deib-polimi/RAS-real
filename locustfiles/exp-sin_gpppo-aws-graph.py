@@ -30,7 +30,7 @@ CONFIG = {
         "params" : {
             "period" : 1, 
             "init_cores" : 1, 
-            "min_cores" : 28,
+            "min_cores" : 27,
             "max_cores" : 28,
             "st" : 0.8,
             "train" : False,
