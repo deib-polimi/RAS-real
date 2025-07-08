@@ -47,8 +47,8 @@ def controller_loop(environment):
         containerSet.reload()
         containerQuotas.reload()
 
-        print("cpuset_cpus",containerSet.attrs['HostConfig'].get("cpuset_cpus"))
-        print("cpu_quota",containerQuotas.attrs['HostConfig'].get("cpu_quota"))
+        print("cpuset_cpus",containerSet.attrs['HostConfig'].get("CpusetCpus"))
+        print("cpu_quota",containerQuotas.attrs['HostConfig'].get("CpuQuota"))
         
         sleep(controller.period)
 
