@@ -15,7 +15,7 @@ CONFIG = {
     "spawn_rate": 1,
     "end" : 800,
     "noise_start":150,
-    "noise_scale":1.2,
+    "noise_scale":2.0,
     "noise_type":"avg",
     "generator" : {
         "class" : "SinGen",
@@ -38,7 +38,7 @@ CONFIG = {
             "trend_features" : False,
             "enable_log" : True,
             "log_dir" : "./logs",
-            "kp" : 10,
+            "kp" : 4,
             "ki" : 0.5,
             "gp_train_start": 100,
             "gp_min_samples": 150,
