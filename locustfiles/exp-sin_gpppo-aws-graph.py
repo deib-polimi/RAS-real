@@ -39,7 +39,7 @@ CONFIG = {
             "enable_log" : True,
             "log_dir" : "./logs",
             "kp" : 10,
-            "ki" : 3,
+            "ki" : 0.5,
             "gp_train_start": 100,
             "gp_min_samples": 150,
             "gp_train_freq": 50,
