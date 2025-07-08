@@ -31,7 +31,7 @@ CONFIG = {
             "period" : 1, 
             "init_cores" : 1, 
             "min_cores" : 0.5,
-            "max_cores" : 24,
+            "max_cores" : 28,
             "st" : 0.8,
             "train" : False,
             "burst_mode" : "none",
