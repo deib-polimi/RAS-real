@@ -40,9 +40,16 @@ def controller_loop(environment):
         setCores = max(setCores, 1)
         print(f"{controller.name} - t: {int(t)} - cores: {cores} - RT: {controller.monitoring.getRT()} - users: {controller.monitoring.getUsers()}")
         containerSet.update(cpuset_cpus=f"{cpu_range_start}-{cpu_range_start+setCores-1}")
-        print(f"setCores: {setCores}, quotaCores: {quotaCores}")    
         if cores != setCores:
             containerQuotas.update(cpu_quota=int(quotaCores*CPU_PERIOD), cpu_period=CPU_PERIOD)
+
+        print(f"setCores: {setCores}, quotaCores: {quotaCores}")
+        containerSet.reload()
+        containerQuotas.reload()
+
+        print("cpuset_cpus",containerSet.attrs['HostConfig'].get("cpuset_cpus"))
+        print("cpu_quota",containerQuotas.attrs['HostConfig'].get("cpu_quota"))
+        
         sleep(controller.period)
 
         
