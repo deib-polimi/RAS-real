@@ -72,7 +72,7 @@ class GPPPOController(PPOController):
         setpoint = self.setpoint[0] if isinstance(self.setpoint, list) else self.setpoint
         
         # Use PREVIOUS error to compensate for PPO action effects from t-1
-        e = max(0, self.prev_error)  # Error caused by PPO action at t-1 (only positive errors hence under-provisioning)
+        e = self.prev_error  # Error caused by PPO action at t-1 (only positive errors hence under-provisioning)
         
         # Update integral term with previous error
         self.integral_error += e
@@ -155,7 +155,7 @@ class GPPPOController(PPOController):
 
         # Store data for GP training using PREVIOUS step values (cause-effect relationship)
         # Input: [prev_ppo_action, prev_users, prev_rt] → Output: current_pid_compensation
-        if hasattr(self, 'prev_action_ppo') and pid_compensation > 0:  # Only train GP on under-provisioning cases
+        if hasattr(self, 'prev_action_ppo'):  # Only train GP on under-provisioning cases
             gp_input = np.array([self.prev_action_ppo, self.prev_users, self.prev_rt])
             print(f"GP input: {gp_input} → PID compensation: {pid_compensation:.3f}")
             self.gp_data_buffer.append((gp_input, pid_compensation))
