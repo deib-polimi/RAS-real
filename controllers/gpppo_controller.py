@@ -157,15 +157,9 @@ class GPPPOController(PPOController):
         
         print(f"PI compensation: ideal_cores={ideal_pi_cores:.3f} current_cores={self.cores:.3f} delta={pi_compensation:.3f}")
 
-        # We only want to compensate for under-provisioning, so we only consider positive compensations.
-        if pi_compensation < 0:
-            pi_compensation = 0
-            if(self.aux_pi_controller.xc_prec < 0):
-                self.aux_pi_controller.xc_prec = 0
-
         # Store data for GP training using PREVIOUS step values (cause-effect relationship)
         # Input: [prev_ppo_action, prev_users, prev_rt] → Output: current_pid_compensation
-        if hasattr(self, 'prev_action_ppo') and pi_compensation > 0:  # Only train GP on under-provisioning cases
+        if hasattr(self, 'prev_action_ppo'):  # Train GP on both under-provisioning and over-provisioning cases
             gp_input = np.array([self.prev_action_ppo, self.prev_users, self.prev_rt])
             print(f"GP input: {gp_input} → PI compensation: {pi_compensation:.3f}")
             self.gp_data_buffer.append((gp_input, pi_compensation))
@@ -189,7 +183,7 @@ class GPPPOController(PPOController):
             compensation_source = "GP"
         # Phase 1: Use direct PID before GP is ready.
         else:
-            actual_compensation = pi_compensation # Already clipped at 0
+            actual_compensation = pi_compensation # Can be positive or negative
             compensation_source = "PI"
 
         final_delta = action_base_rl + actual_compensation

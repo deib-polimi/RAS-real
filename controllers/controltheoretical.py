@@ -30,6 +30,7 @@ class CTControllerScaleX(Controller):
         self.xc_prec = float(self.cores - prop)
         self.old_cores = self.cores
         print("cores: ", self.cores, "c_cores", cores, "intg", intg, "prop", prop, "xc_prec", self.xc_prec)
+        return self.cores
 
     def __str__(self):
         return super().__str__() + " BC: %.2f DC: %.2f " % (self.BC, self.DC)
