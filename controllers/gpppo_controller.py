@@ -119,12 +119,16 @@ class GPPPOController(PPOController):
         if len(self._error_history) < window:
             return
         mean_err = np.mean(self._error_history)
+        old_bc = self.aux_pi_controller.BC
+        old_dc = self.aux_pi_controller.DC
         if mean_err > high_err:
             self.aux_pi_controller.BC = min(self.aux_pi_controller.BC * up_factor, max_gain)
             self.aux_pi_controller.DC = min(self.aux_pi_controller.DC * up_factor, max_gain)
+            print(f"AUTOTUNING: Errore alto ({mean_err:.3f}), aumentando BC: {old_bc:.3f}->{self.aux_pi_controller.BC:.3f}, DC: {old_dc:.3f}->{self.aux_pi_controller.DC:.3f}")
         elif mean_err < low_err:
             self.aux_pi_controller.BC = max(self.aux_pi_controller.BC * down_factor, min_gain)
             self.aux_pi_controller.DC = max(self.aux_pi_controller.DC * down_factor, min_gain)
+            print(f"AUTOTUNING: Errore basso ({mean_err:.3f}), riducendo BC: {old_bc:.3f}->{self.aux_pi_controller.BC:.3f}, DC: {old_dc:.3f}->{self.aux_pi_controller.DC:.3f}")
 
     def control(self, t):
         # Get base PPO action
@@ -205,7 +209,7 @@ class GPPPOController(PPOController):
             actual_compensation = pi_compensation # Can be positive or negative
             compensation_source = "PI"
 
-        final_delta = action_base_rl - actual_compensation
+        final_delta = action_base_rl + actual_compensation
 
         proposed_cores = self.cores + final_delta
         proposed_cores=max(self.min_cores,min(self.max_cores,proposed_cores))
