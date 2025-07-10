@@ -10,9 +10,10 @@ from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import Matern, WhiteKernel
 from scipy.stats import norm
 from .ppocontroller import PPOController, _ActorCritic, _RolloutBuf
+from .controltheoretical import CTControllerScaleX
 
 class GPPPOController(PPOController):
-    """PPO autoscaler with GP-based compensation and PID training data generation."""
+    """PPO autoscaler with GP-based compensation and an auxiliary PI controller."""
 
     # GP parameters
     _GP_INPUT_DIM = 3  # [RL action, num_users, response_time]
@@ -22,10 +23,9 @@ class GPPPOController(PPOController):
                  train=True, burst_mode="none", burst_threshold_q=20,
                  burst_threshold_r=30, burst_extra=4, trend_features=False,
                  enable_log=True, log_dir="./logs",
-                 kp=100, ki=0.01,
+                 bc=0.5, dc=0.95, # PI Controller parameters
                  gp_train_start=100, gp_min_samples=300, gp_train_freq=50,
                  gp_max_buffer_size=300, gp_percentile=95):
-                 #kp=0.5, ki=0.05):  # PID parameters
         super().__init__(period, init_cores, min_cores=min_cores,
                         max_cores=max_cores, st=st, name=name,
                         train=train, burst_mode=burst_mode,
@@ -35,25 +35,24 @@ class GPPPOController(PPOController):
                         trend_features=trend_features,
                         enable_log=enable_log, log_dir=log_dir)
 
-        # PID parameters
-        self.kp = kp  # Proportional gain
-        self.ki = ki  # Integral gain
-
         # GP parameters
         self.gp_train_start = gp_train_start
         self.gp_min_samples = gp_min_samples
         self.gp_train_freq = gp_train_freq
         self.gp_percentile = gp_percentile
 
+        # Initialize Auxiliary PI Controller
+        self.aux_pi_controller = CTControllerScaleX(
+            period=period, init_cores=init_cores, min_cores=min_cores,
+            max_cores=max_cores, st=st, BC=bc, DC=dc
+        )
+        
         # Initialize GP
         kernel = Matern(length_scale=np.ones(self._GP_INPUT_DIM), nu=2.5) + \
                 WhiteKernel(noise_level=0.1)
         self.gpr = GaussianProcessRegressor(kernel=kernel, normalize_y=True)
         self.gp_data_buffer = deque(maxlen=gp_max_buffer_size)
         self.gp_train_counter = 0
-
-        # Initialize PID state
-        self.integral_error = 0
         
         # Track previous step for proper PID compensation
         self.prev_error = 0.0
@@ -63,26 +62,14 @@ class GPPPOController(PPOController):
 
         # Additional logging
         if self.enable_log:
-            os.makedirs(log_dir, exist_ok=True)  # Assicurarsi che la directory esista
+            os.makedirs(log_dir, exist_ok=True)
             self.gp_log_path = os.path.join(log_dir, f"gpppo-gp-{time.time()}.log")
 
-    def _calculate_pid_compensation(self):
-        """Calculate PID compensation based on PREVIOUS step error to correct PPO action effects."""
-        # Gestire setpoint come lista o valore singolo (compatibilità con framework)
-        setpoint = self.setpoint[0] if isinstance(self.setpoint, list) else self.setpoint
-        
-        # Use PREVIOUS error to compensate for PPO action effects from t-1
-        e = self.prev_error  # Error caused by PPO action at t-1 (only positive errors hence under-provisioning)
-        
-        # Update integral term with previous error
-        self.integral_error += e
-        
-        # Calculate PID output to compensate previous PPO action
-        compensation = self.kp * e + self.ki * self.integral_error
-
-        print(f"PID compensation: prev_error={e:.3f} integral={self.integral_error:.3f} compensation={compensation:.3f}")
-        
-        return compensation
+    def setSLA(self, sla):
+        """Override to set SLA on both main and auxiliary controllers."""
+        super().setSLA(sla)
+        if hasattr(self, 'aux_pi_controller'):
+            self.aux_pi_controller.setSLA(sla)
 
     def _train_gp(self):
         """Train the GP model if enough data is available."""
@@ -150,18 +137,38 @@ class GPPPOController(PPOController):
 
         print(f"Current setpoing: {setpoint:.3f}")
 
-        # Calculate PID compensation based on PREVIOUS step error (compensates previous PPO action)
-        if(self.cores<self.max_cores and self.cores>self.min_cores):
-            pid_compensation = self._calculate_pid_compensation()
-        else:
-            pid_compensation = 0
+        # Calculate PI compensation using the auxiliary controller
+        class MockMonitoring:
+            """Mocks the monitoring object to feed a specific RT to the aux controller."""
+            def __init__(self, rt):
+                self._rt = rt
+            def getRT(self):
+                return self._rt
+
+        # Synchronize state and feed the previous RT to the auxiliary controller
+        self.aux_pi_controller.cores = self.cores # Set current core count
+        self.aux_pi_controller.setMonitoring(MockMonitoring(self.prev_rt))
+        
+        # Get the ideal number of cores recommended by the PI controller
+        ideal_pi_cores = self.aux_pi_controller.control(t)
+
+        # The compensation is the difference between the PI ideal and current state
+        pi_compensation = ideal_pi_cores - self.cores
+        
+        print(f"PI compensation: ideal_cores={ideal_pi_cores:.3f} current_cores={self.cores:.3f} delta={pi_compensation:.3f}")
+
+        # We only want to compensate for under-provisioning, so we only consider positive compensations.
+        if pi_compensation < 0:
+            pi_compensation = 0
+            if(self.aux_pi_controller.xc_prec < 0):
+                self.aux_pi_controller.xc_prec = 0
 
         # Store data for GP training using PREVIOUS step values (cause-effect relationship)
         # Input: [prev_ppo_action, prev_users, prev_rt] → Output: current_pid_compensation
-        if hasattr(self, 'prev_action_ppo'):  # Only train GP on under-provisioning cases
+        if hasattr(self, 'prev_action_ppo') and pi_compensation > 0:  # Only train GP on under-provisioning cases
             gp_input = np.array([self.prev_action_ppo, self.prev_users, self.prev_rt])
-            print(f"GP input: {gp_input} → PID compensation: {pid_compensation:.3f}")
-            self.gp_data_buffer.append((gp_input, pid_compensation))
+            print(f"GP input: {gp_input} → PI compensation: {pi_compensation:.3f}")
+            self.gp_data_buffer.append((gp_input, pi_compensation))
 
         # Get GP compensation if trained (predict compensation for current PPO action)
         gp_compensation = 0
@@ -182,8 +189,8 @@ class GPPPOController(PPOController):
             compensation_source = "GP"
         # Phase 1: Use direct PID before GP is ready.
         else:
-            actual_compensation = pid_compensation # Already clipped at 0
-            compensation_source = "PID"
+            actual_compensation = pi_compensation # Already clipped at 0
+            compensation_source = "PI"
 
         final_delta = action_base_rl + actual_compensation
 
@@ -233,9 +240,10 @@ class GPPPOController(PPOController):
     def reset(self):
         """Reset controller state."""
         super().reset()
-        self.integral_error = 0
         self.gp_data_buffer.clear()
         self.gp_train_counter = 0
+        if hasattr(self, 'aux_pi_controller'):
+            self.aux_pi_controller.reset()
         
         # Reset previous step tracking
         self.prev_error = 0.0

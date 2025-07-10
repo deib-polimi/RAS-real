@@ -8,7 +8,7 @@ CONFIG = {
         "path" : "/function/graph_mst"
     },
     "cpu_range_start" : 0,
-    "monitoring_window": 1,
+    "monitoring_window": 30,
     "app_sla": 0.6,
     "wait_time_min": 1,
     "wait_time_max": 1,
@@ -38,10 +38,10 @@ CONFIG = {
             "trend_features" : False,
             "enable_log" : True,
             "log_dir" : "./logs",
-            "kp" : 0.5,
-            "ki" : 0.05,
-            "gp_train_start": 1,
-            "gp_min_samples": 100000,
+            "bc": 0.5,
+            "dc": 0.95,
+            "gp_train_start": 100,
+            "gp_min_samples": 150,
             "gp_train_freq": 50,
             "gp_max_buffer_size": 300,
             "gp_percentile": 95
