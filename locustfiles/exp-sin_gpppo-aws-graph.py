@@ -9,7 +9,7 @@ CONFIG = {
     },
     "cpu_range_start" : 1,
     "monitoring_window": 30,
-    "app_sla": 0.25,
+    "app_sla": 0.6,
     "wait_time_min": 1,
     "wait_time_max": 1,
     "spawn_rate": 1,
