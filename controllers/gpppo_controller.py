@@ -159,7 +159,7 @@ class GPPPOController(PPOController):
 
         # Store data for GP training using PREVIOUS step values (cause-effect relationship)
         # Input: [prev_ppo_action, prev_users, prev_rt] → Output: current_pid_compensation
-        if hasattr(self, 'prev_action_ppo'):  # Train GP on both under-provisioning and over-provisioning cases
+        if hasattr(self, 'prev_action_ppo') and self.step_cnt >= self.gp_train_start:  # Train GP on both under-provisioning and over-provisioning cases
             gp_input = np.array([self.prev_action_ppo, self.prev_users, self.prev_rt])
             print(f"GP input: {gp_input} → PI compensation: {pi_compensation:.3f}")
             self.gp_data_buffer.append((gp_input, pi_compensation))
