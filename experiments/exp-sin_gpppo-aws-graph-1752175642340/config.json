@@ -1,0 +1,60 @@
+{
+    "hosts": [
+        "http://localhost:8080",
+        "http://localhost:8081"
+    ],
+    "containerIds": [
+        "graph_set",
+        "graph_quota"
+    ],
+    "request": {
+        "method": "POST",
+        "data": {
+            "size": 25000
+        },
+        "headers": {
+            "Content-Type": "application/json"
+        },
+        "path": "/function/graph_mst"
+    },
+    "cpu_range_start": 0,
+    "monitoring_window": 1,
+    "app_sla": 0.6,
+    "wait_time_min": 1,
+    "wait_time_max": 1,
+    "spawn_rate": 1,
+    "end": 600,
+    "noise_start": 150,
+    "noise_scale": 2.0,
+    "noise_type": "avg",
+    "generator": {
+        "class": "SinGen",
+        "params": {
+            "period": 200,
+            "mod": 20,
+            "shift": 20
+        }
+    },
+    "controller": {
+        "class": "GPPPOController",
+        "params": {
+            "period": 1,
+            "init_cores": 1,
+            "min_cores": 0.5,
+            "max_cores": 28,
+            "st": 0.8,
+            "train": false,
+            "burst_mode": "none",
+            "trend_features": false,
+            "enable_log": true,
+            "log_dir": "./logs",
+            "kp": 0.5,
+            "ki": 0.05,
+            "gp_train_start": 1,
+            "gp_min_samples": 100000,
+            "gp_train_freq": 50,
+            "gp_max_buffer_size": 300,
+            "gp_percentile": 95
+        }
+    }
+}
