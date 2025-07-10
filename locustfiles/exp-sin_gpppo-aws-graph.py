@@ -40,8 +40,8 @@ CONFIG = {
             "log_dir" : "./logs",
             "bc": 0.5,
             "dc": 0.95,
-            "gp_train_start": 300,
-            "gp_min_samples": 300,
+            "gp_train_start": 100000,
+            "gp_min_samples": 100000,
             "gp_train_freq": 50,
             "gp_max_buffer_size": 300,
             "gp_percentile": 95
