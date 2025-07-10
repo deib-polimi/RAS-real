@@ -41,7 +41,7 @@ CONFIG = {
             "kp" : 2.5,
             "ki" : 0.25,
             "gp_train_start": 1,
-            "gp_min_samples": 300,
+            "gp_min_samples": 100000,
             "gp_train_freq": 50,
             "gp_max_buffer_size": 300,
             "gp_percentile": 95
