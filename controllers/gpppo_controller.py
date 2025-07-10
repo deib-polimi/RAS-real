@@ -166,7 +166,7 @@ class GPPPOController(PPOController):
 
         # Get GP compensation if trained (predict compensation for current PPO action)
         gp_compensation = 0
-        if len(self.gp_data_buffer) >= self.gp_min_samples:
+        if len(self.gp_data_buffer) >= self.gp_min_samples and self.step_cnt >= self.gp_train_start:
             print(f"Predicting GP with {len(self.gp_data_buffer)} samples") 
             # Use current values to predict compensation for current PPO action
             X_pred = np.array([action_base_rl, num_users, current_rt]).reshape(1, -1)
