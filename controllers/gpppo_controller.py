@@ -107,6 +107,25 @@ class GPPPOController(PPOController):
         #return float(percentile_value.item())
         return float(mean)
 
+    def auto_tune_pi(self, window=20, high_err=0.05, low_err=0.01, up_factor=1.2, down_factor=0.8, max_gain=5.0, min_gain=0.01):
+        """Autotuning semplice: aumenta BC/DC se errore medio alto, li riduce se basso."""
+        if not hasattr(self, '_error_history'):
+            self._error_history = []
+        # Salva errore corrente
+        self._error_history.append(abs(self.prev_error))
+        if len(self._error_history) > window:
+            self._error_history.pop(0)
+        # Solo se abbiamo abbastanza dati
+        if len(self._error_history) < window:
+            return
+        mean_err = np.mean(self._error_history)
+        if mean_err > high_err:
+            self.aux_pi_controller.BC = min(self.aux_pi_controller.BC * up_factor, max_gain)
+            self.aux_pi_controller.DC = min(self.aux_pi_controller.DC * up_factor, max_gain)
+        elif mean_err < low_err:
+            self.aux_pi_controller.BC = max(self.aux_pi_controller.BC * down_factor, min_gain)
+            self.aux_pi_controller.DC = max(self.aux_pi_controller.DC * down_factor, min_gain)
+
     def control(self, t):
         # Get base PPO action
         if self.burst_mode in ("guard", "hybrid") and self._burst():
@@ -220,13 +239,17 @@ class GPPPOController(PPOController):
         self.prev_users = num_users
         self.prev_rt = current_rt
 
+        # Autotuning ogni 20 step
+        if self.step_cnt % 20 == 0:
+            self.auto_tune_pi()
+
         # Log
         if self.enable_log:
             rt = self.monitoring.getRT()
             gp_status = f"GP:{len(self.gp_data_buffer)}/{self.gp_min_samples}" if len(self.gp_data_buffer) < self.gp_min_samples else "GP:ACTIVE"
             line = (f"{t:.1f}s lat={rt:.2f} cores={self.cores} "
                    f"Δ={final_delta:.2f} (RL:{action_base_rl:.2f} {compensation_source}:{actual_compensation:.2f}) "
-                   f"rew={self.prev_reward:.2f} {gp_status}")
+                   f"rew={self.prev_reward:.2f} {gp_status} BC={self.aux_pi_controller.BC:.3f} DC={self.aux_pi_controller.DC:.3f}")
             print(line)
             with open(self.log_path, "a") as f:
                 f.write(line + "\n")
