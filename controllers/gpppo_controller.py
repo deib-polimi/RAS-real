@@ -151,7 +151,10 @@ class GPPPOController(PPOController):
         print(f"Current setpoing: {setpoint:.3f}")
 
         # Calculate PID compensation based on PREVIOUS step error (compensates previous PPO action)
-        pid_compensation = self._calculate_pid_compensation()
+        if(self.cores<self.max_cores and self.cores>self.min_cores):
+            pid_compensation = self._calculate_pid_compensation()
+        else:
+            pid_compensation = 0
 
         # Store data for GP training using PREVIOUS step values (cause-effect relationship)
         # Input: [prev_ppo_action, prev_users, prev_rt] → Output: current_pid_compensation
