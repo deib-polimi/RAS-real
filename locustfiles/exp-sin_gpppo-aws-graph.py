@@ -8,14 +8,14 @@ CONFIG = {
         "path" : "/function/graph_mst"
     },
     "cpu_range_start" : 1,
-    "monitoring_window": 30,
+    "monitoring_window": 5,
     "app_sla": 0.6,
     "wait_time_min": 1,
     "wait_time_max": 1,
     "spawn_rate": 1,
-    "end" : 800,
+    "end" : 600,
     "noise_start":150,
-    "noise_scale":2,
+    "noise_scale":2.0,
     "noise_type":"avg",
     "generator" : {
         "class" : "SinGen",
