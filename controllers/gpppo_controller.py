@@ -186,7 +186,7 @@ class GPPPOController(PPOController):
             actual_compensation = pi_compensation # Can be positive or negative
             compensation_source = "PI"
 
-        final_delta = action_base_rl + actual_compensation
+        final_delta = action_base_rl - actual_compensation
 
         proposed_cores = self.cores + final_delta
         proposed_cores=max(self.min_cores,min(self.max_cores,proposed_cores))
