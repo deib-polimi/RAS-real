@@ -158,7 +158,7 @@ class PPOController(Controller):
         if state is None:
             line=f"{t:.1f} s | GUARD +{delta} cores"
         else:
-            rt=self.monitoring.getRTp95(); line=(f"{t:.1f}s lat={rt:.2f} cores={self.cores} Δ={delta:+d} rew={self.prev_reward:.2f}")
+            rt=self.monitoring.getRTp95(); line=(f"{t:.1f}s lat={rt:.2f} cores={self.cores} Δ={delta:+.2f} rew={self.prev_reward:.2f}")
         print(line)
         with open(self.log_path,"a") as f: f.write(line+"\n")
 
