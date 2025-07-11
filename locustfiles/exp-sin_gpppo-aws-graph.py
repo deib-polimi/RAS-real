@@ -15,7 +15,7 @@ CONFIG = {
     "spawn_rate": 1,
     "end" : 900,
     "noise_start":150,
-    "noise_scale":2.0,
+    "noise_scale":1.8,
     "noise_type":"avg",
     "generator" : {
         "class" : "SinGen",
