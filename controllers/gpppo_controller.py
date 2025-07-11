@@ -42,6 +42,9 @@ class GPPPOController(PPOController):
         self.gp_percentile = gp_percentile
         self.pi_start_time = pi_start_time
 
+        # For ST auto-tuning
+        self._sla_violation_errors = []
+
         # Initialize Auxiliary PI Controller
         self.aux_pi_controller = CTControllerScaleX(
             period=period, init_cores=init_cores, min_cores=min_cores,
@@ -108,28 +111,38 @@ class GPPPOController(PPOController):
         #return float(percentile_value.item())
         return float(mean)
 
-    def auto_tune_pi(self, window=20, high_err=0.05, low_err=0.01, up_factor=1.2, down_factor=0.8, max_gain=25.0, min_gain=1.0):
-        """Autotuning semplice: aumenta BC/DC se errore medio alto, li riduce se basso."""
-        if not hasattr(self, '_error_history'):
-            self._error_history = []
-        # Salva errore corrente
-        self._error_history.append(abs(self.prev_error))
-        if len(self._error_history) > window:
-            self._error_history.pop(0)
-        # Solo se abbiamo abbastanza dati
-        if len(self._error_history) < window:
+    def auto_tune_st(self, window_size=5, min_st=0.5, adjustment_factor=0.1):
+        """
+        Autotuning for the 'st' parameter based on the 95th percentile of SLA violation errors.
+        This makes the controller more conservative if the SLA is consistently missed by a large margin.
+        """
+        # We need at least a few violations to calculate a meaningful percentile.
+        if len(self._sla_violation_errors) < window_size:
             return
-        mean_err = np.mean(self._error_history)
-        old_bc = self.aux_pi_controller.BC
-        old_dc = self.aux_pi_controller.DC
-        if mean_err > high_err:
-            self.aux_pi_controller.BC = min(self.aux_pi_controller.BC * up_factor, max_gain)
-            self.aux_pi_controller.DC = min(self.aux_pi_controller.DC * up_factor, max_gain)
-            print(f"AUTOTUNING: Errore alto ({mean_err:.3f}), aumentando BC: {old_bc:.3f}->{self.aux_pi_controller.BC:.3f}, DC: {old_dc:.3f}->{self.aux_pi_controller.DC:.3f}")
-        elif mean_err < low_err:
-            self.aux_pi_controller.BC = max(self.aux_pi_controller.BC * down_factor, min_gain)
-            self.aux_pi_controller.DC = max(self.aux_pi_controller.DC * down_factor, min_gain)
-            print(f"AUTOTUNING: Errore basso ({mean_err:.3f}), riducendo BC: {old_bc:.3f}->{self.aux_pi_controller.BC:.3f}, DC: {old_dc:.3f}->{self.aux_pi_controller.DC:.3f}")
+
+        error_95_percentile = np.percentile(self._sla_violation_errors, 95)
+
+        # The relative error tells us how bad the violation is compared to the SLA.
+        if self.sla > 0:
+            relative_error = error_95_percentile / self.sla
+        else:
+            relative_error = 0
+            
+        old_st = self.st
+        # Lower the st value based on the magnitude of the relative error.
+        st_reduction = adjustment_factor * relative_error
+        new_st = self.st - st_reduction
+        
+        # Clamp the new st value to a safe range.
+        self.st = max(min_st, new_st)
+
+        # If st changed, we must update the setpoint for both controllers.
+        if old_st != self.st:
+            self.setSLA(self.sla) # This will update self.setpoint and self.aux_pi_controller.setpoint
+            print(f"AUTOTUNING ST: 95th perc. error={error_95_percentile:.3f}s. Relative error={relative_error:.2%}. st: {old_st:.3f} -> {self.st:.3f}")
+
+        # Clear the history to start collecting fresh errors for the next tuning interval.
+        self._sla_violation_errors.clear()
 
     def control(self, t):
         # Chiama il controllo base del PPO controller
@@ -152,7 +165,9 @@ class GPPPOController(PPOController):
         # Current error for next step
         current_error = current_rt - setpoint
         
-
+        # Record SLA violations for ST auto-tuning
+        if current_error > 0:
+            self._sla_violation_errors.append(current_error)
 
         print(f"Current setpoing: {setpoint:.3f}")
 
@@ -225,16 +240,16 @@ class GPPPOController(PPOController):
         self.prev_rt = current_rt
 
         # Autotuning ogni 20 step
-        if self.step_cnt % 20 == 0:
-            self.auto_tune_pi()
+        if self.step_cnt > 0 and self.step_cnt % 20 == 0:
+            self.auto_tune_st()
 
         # Log
         if self.enable_log:
             rt = self.monitoring.getRT()
             gp_status = f"GP:{len(self.gp_data_buffer)}/{self.gp_min_samples}" if len(self.gp_data_buffer) < self.gp_min_samples else "GP:ACTIVE"
             line = (f"{t:.1f}s lat={rt:.2f} cores={self.cores} "
-                   f"compensation={actual_compensation:.2f} ({compensation_source}) "
-                   f"rew={self.prev_reward:.2f} {gp_status} BC={self.aux_pi_controller.BC:.3f} DC={self.aux_pi_controller.DC:.3f}")
+                   f"compensation={guardrail_compensation:.2f} ({compensation_source}) "
+                   f"rew={self.prev_reward:.2f} {gp_status} st={self.st:.3f} BC={self.aux_pi_controller.BC:.3f} DC={self.aux_pi_controller.DC:.3f}")
             print(line)
             with open(self.log_path, "a") as f:
                 f.write(line + "\n")
