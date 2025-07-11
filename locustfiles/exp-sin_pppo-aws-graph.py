@@ -13,9 +13,9 @@ CONFIG = {
     "wait_time_min": 1,
     "wait_time_max": 1,
     "spawn_rate": 1,
-    "end" : 800,
+    "end" : 900,
     "noise_start":150,
-    "noise_scale":1.25,
+    "noise_scale":1.4,
     "noise_type":"avg",
     "generator" : {
         "class" : "SinGen",
