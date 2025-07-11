@@ -166,6 +166,29 @@ class GPPPOController(PPOController):
 
         # Current error for next step (used for internal PI controller logic)
         current_error = current_rt - setpoint
+
+        print(f"Current setpoing: {setpoint:.3f}")
+
+        # Calculate PI compensation using the auxiliary controller
+        class MockMonitoring:
+            """Mocks the monitoring object to feed a specific RT to the aux controller."""
+            def __init__(self, rt):
+                self._rt = rt
+            def getRT(self):
+                return self._rt
+
+        # Synchronize state and feed the previous RT to the auxiliary controller
+        self.aux_pi_controller.cores = ppo_cores # Set current core count, not self.cores!
+        self.aux_pi_controller.setMonitoring(MockMonitoring(self.prev_rt))
+        
+        # Get the ideal number of cores recommended by the PI controller
+        self.aux_pi_controller.control(t)  # This sets aux_pi_controller.cores
+        ideal_pi_cores = self.aux_pi_controller.cores
+
+        # The compensation is the difference between the PI ideal and current state
+        pi_compensation = ideal_pi_cores - ppo_cores
+        
+        print(f"PI compensation: ideal_cores={ideal_pi_cores:.3f} current_cores={ppo_cores:.3f} delta={pi_compensation:.3f}")
         
         # Determine compensation and store training data only after PI guardrail is active
         actual_compensation = 0
