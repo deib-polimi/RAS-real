@@ -25,7 +25,7 @@ class GPPPOController(PPOController):
                  enable_log=True, log_dir="./logs",
                  bc=5.0, dc=10.0, # PI Controller parameters (increased for responsiveness)
                  gp_train_start=100, gp_min_samples=300, gp_train_freq=50,
-                 gp_max_buffer_size=300, gp_percentile=95):
+                 gp_max_buffer_size=300, gp_percentile=95, pi_start_time=0):
         super().__init__(period, init_cores, min_cores=min_cores,
                         max_cores=max_cores, st=st, name=name,
                         train=train, burst_mode=burst_mode,
@@ -40,6 +40,7 @@ class GPPPOController(PPOController):
         self.gp_min_samples = gp_min_samples
         self.gp_train_freq = gp_train_freq
         self.gp_percentile = gp_percentile
+        self.pi_start_time = pi_start_time
 
         # Initialize Auxiliary PI Controller
         self.aux_pi_controller = CTControllerScaleX(
@@ -133,6 +134,7 @@ class GPPPOController(PPOController):
     def control(self, t):
         # Chiama il controllo base del PPO controller
         super().control(t)
+        ppo_cores = self.cores # This is the decision from the PPO controller
         
         # Get current metrics dopo che il PPO ha aggiornato i core
         current_rt = self.monitoring.getRT()
@@ -171,43 +173,35 @@ class GPPPOController(PPOController):
         ideal_pi_cores = self.aux_pi_controller.cores
 
         # The compensation is the difference between the PI ideal and current state
-        pi_compensation = ideal_pi_cores - self.cores
+        pi_compensation = ideal_pi_cores - ppo_cores
         
-        print(f"PI compensation: ideal_cores={ideal_pi_cores:.3f} current_cores={self.cores:.3f} delta={pi_compensation:.3f}")
+        print(f"PI compensation: ideal_cores={ideal_pi_cores:.3f} current_cores={ppo_cores:.3f} delta={pi_compensation:.3f}")
 
-        # Store data for GP training using PREVIOUS step values (cause-effect relationship)
-        # Input: [prev_ppo_action, prev_users, prev_rt] → Output: current_pid_compensation
-        if hasattr(self, 'prev_action_ppo') and self.step_cnt >= self.gp_train_start:  # Train GP on both under-provisioning and over-provisioning cases
-            gp_input = np.array([self.prev_action_ppo, self.prev_users, self.prev_rt])
-            print(f"GP input: {gp_input} → PI compensation: {pi_compensation:.3f}")
-            self.gp_data_buffer.append((gp_input, pi_compensation))
-
-        # Get GP compensation if trained (predict compensation for current PPO action)
-        gp_compensation = 0
-        if len(self.gp_data_buffer) >= self.gp_min_samples and self.step_cnt >= self.gp_train_start:
-            print(f"Predicting GP with {len(self.gp_data_buffer)} samples") 
-            # Use previous values to predict compensation for the error that caused the PPO action
-            X_pred = np.array([self.prev_action_ppo, self.prev_users, self.prev_rt]).reshape(1, -1)
-            gp_compensation = self._get_gp_prediction(X_pred, self.prev_rt)
-            print(f"GP compensation: {gp_compensation}")
-
-        # Phased compensation: Use direct PID until GP is trained, then switch to GP.
+        # Determine compensation and store training data only after PI guardrail is active
         actual_compensation = 0
         compensation_source = "None"
-        ppo_cores = self.cores # This is the decision from the PPO controller
+        if t >= self.pi_start_time:
+            # Store data for GP training using PREVIOUS step values (cause-effect relationship)
+            if hasattr(self, 'prev_action_ppo') and self.step_cnt >= self.gp_train_start:
+                gp_input = np.array([self.prev_action_ppo, self.prev_users, self.prev_rt])
+                print(f"GP input: {gp_input} → PI compensation: {pi_compensation:.3f}")
+                self.gp_data_buffer.append((gp_input, pi_compensation))
 
-        # Phase 2: Use GP if trained and active.
-        if self.step_cnt >= self.gp_train_start and len(self.gp_data_buffer) >= self.gp_min_samples:
-            actual_compensation =  gp_compensation
-            compensation_source = "GP"
-        # Phase 1: Use direct PID before GP is ready.
-        else:
-            actual_compensation = pi_compensation
-            compensation_source = "PI"
+            # Phased compensation: Use direct PID until GP is trained, then switch to GP.
+            # Phase 2: Use GP if trained and active.
+            if self.step_cnt >= self.gp_train_start and len(self.gp_data_buffer) >= self.gp_min_samples:
+                print(f"Predicting GP with {len(self.gp_data_buffer)} samples") 
+                X_pred = np.array([self.prev_action_ppo, self.prev_users, self.prev_rt]).reshape(1, -1)
+                gp_compensation = self._get_gp_prediction(X_pred, self.prev_rt)
+                print(f"GP compensation: {gp_compensation}")
+                actual_compensation = gp_compensation
+                compensation_source = "GP"
+            # Phase 1: Use direct PID before GP is ready.
+            else:
+                actual_compensation = pi_compensation
+                compensation_source = "PI"
 
         # The guardrail should only ADD cores, never remove them.
-        # We only apply positive compensation to what PPO decided.
-        # If compensation is negative, we ignore it.
         guardrail_compensation = max(0, actual_compensation)
 
         # The final decision is the PPO's choice plus any positive (upward) compensation.

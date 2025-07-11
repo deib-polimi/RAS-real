@@ -44,7 +44,8 @@ CONFIG = {
             "gp_min_samples": 100000,
             "gp_train_freq": 50,
             "gp_max_buffer_size": 300,
-            "gp_percentile": 95
+            "gp_percentile": 95,
+            "pi_start_time": 150
         }
     }
 }
