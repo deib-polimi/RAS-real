@@ -131,32 +131,26 @@ class GPPPOController(PPOController):
             print(f"AUTOTUNING: Errore basso ({mean_err:.3f}), riducendo BC: {old_bc:.3f}->{self.aux_pi_controller.BC:.3f}, DC: {old_dc:.3f}->{self.aux_pi_controller.DC:.3f}")
 
     def control(self, t):
-        # Get base PPO action
-        if self.burst_mode in ("guard", "hybrid") and self._burst():
-            self.cores = min(self.cores + self.burst_extra, self.max_cores)
-            if self.burst_mode == "guard":
-                self._log(t, None, self.burst_extra, guard=True)
-                return
-
-        state = self._state()
-        logits, val = self.ac(torch.tensor(state, dtype=torch.float32, device=self.device))
-        dist = torch.distributions.Categorical(logits=logits)
-        a_idx = int(dist.sample().item())
-        logp = float(dist.log_prob(torch.tensor(a_idx)))
-        val = float(val)
-
-        # Get base RL action
-        delta = int(self.actions[a_idx])
-        delta = max(self.min_cores - self.cores, min(delta, self.max_cores - self.cores))
-        action_base_rl = delta
-
-        # Get current metrics
+        # Chiama il controllo base del PPO controller
+        super().control(t)
+        
+        # Get current metrics dopo che il PPO ha aggiornato i core
         current_rt = self.monitoring.getRT()
         num_users = self.monitoring.getUsers()
         
-        # Calculate current error for next step
+        # Calculate error based on previous state (that caused the PPO action)
         setpoint = self.setpoint[0] if isinstance(self.setpoint, list) else self.setpoint
+        if hasattr(self, 'prev_rt') and self.prev_rt is not None:
+            # Use previous RT to calculate the error that caused the PPO action
+            previous_error = self.prev_rt - setpoint
+        else:
+            # First step, use current error
+            previous_error = 0
+        
+        # Current error for next step
         current_error = current_rt - setpoint
+        
+
 
         print(f"Current setpoing: {setpoint:.3f}")
 
@@ -173,7 +167,8 @@ class GPPPOController(PPOController):
         self.aux_pi_controller.setMonitoring(MockMonitoring(self.prev_rt))
         
         # Get the ideal number of cores recommended by the PI controller
-        ideal_pi_cores = self.aux_pi_controller.control(t)
+        self.aux_pi_controller.control(t)  # This sets aux_pi_controller.cores
+        ideal_pi_cores = self.aux_pi_controller.cores
 
         # The compensation is the difference between the PI ideal and current state
         pi_compensation = ideal_pi_cores - self.cores
@@ -191,9 +186,9 @@ class GPPPOController(PPOController):
         gp_compensation = 0
         if len(self.gp_data_buffer) >= self.gp_min_samples and self.step_cnt >= self.gp_train_start:
             print(f"Predicting GP with {len(self.gp_data_buffer)} samples") 
-            # Use current values to predict compensation for current PPO action
-            X_pred = np.array([action_base_rl, num_users, current_rt]).reshape(1, -1)
-            gp_compensation = self._get_gp_prediction(X_pred, current_rt)
+            # Use previous values to predict compensation for the error that caused the PPO action
+            X_pred = np.array([self.prev_action_ppo, self.prev_users, self.prev_rt]).reshape(1, -1)
+            gp_compensation = self._get_gp_prediction(X_pred, self.prev_rt)
             print(f"GP compensation: {gp_compensation}")
 
         # Phased compensation: Use direct PID until GP is trained, then switch to GP.
@@ -209,37 +204,24 @@ class GPPPOController(PPOController):
             actual_compensation = pi_compensation # Can be positive or negative
             compensation_source = "PI"
 
-        final_delta = action_base_rl + actual_compensation
+        # Apply compensation to the cores already set by PPO
+        final_cores = self.cores + actual_compensation
+        final_cores = max(self.min_cores, min(self.max_cores, final_cores))
+        self.cores = final_cores
 
-        proposed_cores = self.cores + final_delta
-        proposed_cores=max(self.min_cores,min(self.max_cores,proposed_cores))
-
-        print(f"proposed_cores: {proposed_cores}, action_base_rl: {action_base_rl}, {compensation_source} compensation: {actual_compensation}")
-        self.cores = proposed_cores
-
-        # Update PPO training
-        if self.train and self.prev_state is not None:
-            self.buf.store(self.prev_state, self.prev_act, self.prev_logp,
-                          self._reward(), False, self.prev_val)
-            if len(self.buf) >= self._ROLLOUT:
-                self._update()
-                self.buf.reset()
+        print(f"Final cores: {self.cores}, PPO cores: {self.cores - actual_compensation}, {compensation_source} compensation: {actual_compensation}")
 
         # Update GP training counter
         self.gp_train_counter += 1
         if self.gp_train_counter >= self.gp_train_freq:
             self._train_gp()
 
-        # Update state tracking
-        self.prev_state = state
-        self.prev_act = a_idx
-        self.prev_logp = logp
-        self.prev_val = val
-        self.step_cnt += 1
-
         # Update previous step values for next iteration
-        self.prev_error = current_error
-        self.prev_action_ppo = action_base_rl
+        self.prev_error = current_error  # Store the error that caused the PPO action
+        if hasattr(self, 'prev_act') and self.prev_act is not None:
+            self.prev_action_ppo = self.prev_act  # Store the PPO action that was just applied
+        else:
+            self.prev_action_ppo = 0  # Fallback if prev_act is not available
         self.prev_users = num_users
         self.prev_rt = current_rt
 
@@ -252,7 +234,7 @@ class GPPPOController(PPOController):
             rt = self.monitoring.getRT()
             gp_status = f"GP:{len(self.gp_data_buffer)}/{self.gp_min_samples}" if len(self.gp_data_buffer) < self.gp_min_samples else "GP:ACTIVE"
             line = (f"{t:.1f}s lat={rt:.2f} cores={self.cores} "
-                   f"Δ={final_delta:.2f} (RL:{action_base_rl:.2f} {compensation_source}:{actual_compensation:.2f}) "
+                   f"compensation={actual_compensation:.2f} ({compensation_source}) "
                    f"rew={self.prev_reward:.2f} {gp_status} BC={self.aux_pi_controller.BC:.3f} DC={self.aux_pi_controller.DC:.3f}")
             print(line)
             with open(self.log_path, "a") as f:
