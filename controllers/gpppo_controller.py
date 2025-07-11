@@ -42,8 +42,8 @@ class GPPPOController(PPOController):
         self.gp_percentile = gp_percentile
         self.pi_start_time = pi_start_time
 
-        # For ST auto-tuning
-        self._sla_violation_errors = []
+        # For ST auto-tuning using a receding horizon (circular buffer)
+        self._sla_violation_history = deque(maxlen=100)
 
         # Initialize Auxiliary PI Controller
         self.aux_pi_controller = CTControllerScaleX(
@@ -111,26 +111,27 @@ class GPPPOController(PPOController):
         #return float(percentile_value.item())
         return float(mean)
 
-    def auto_tune_st(self, window_size=5, min_st=0.5, adjustment_factor=0.1):
+    def auto_tune_st(self, min_samples=10, min_st=0.5, adjustment_factor=0.05):
         """
-        Autotuning for the 'st' parameter based on the 95th percentile of SLA violation errors.
-        This makes the controller more conservative if the SLA is consistently missed by a large margin.
+        Autotuning for the 'st' parameter based on the 95th percentile of SLA violations.
+        This makes the controller more conservative if the SLA is consistently violated.
+        It uses a receding horizon of past violations.
         """
-        # We need at least a few violations to calculate a meaningful percentile.
-        if len(self._sla_violation_errors) < window_size:
+        if len(self._sla_violation_history) < min_samples:
             return
 
-        error_95_percentile = np.percentile(self._sla_violation_errors, 95)
+        # Calculate the 95th percentile on the history of actual SLA violations
+        violation_95th_percentile = np.percentile(list(self._sla_violation_history), 95)
 
-        # The relative error tells us how bad the violation is compared to the SLA.
+        # The relative violation indicates how severe the miss was compared to the target.
         if self.sla > 0:
-            relative_error = error_95_percentile / self.sla
+            relative_violation = violation_95th_percentile / self.sla
         else:
-            relative_error = 0
+            relative_violation = 0
             
         old_st = self.st
-        # Lower the st value based on the magnitude of the relative error.
-        st_reduction = adjustment_factor * relative_error
+        # The reduction is proportional to how badly we are missing the SLA.
+        st_reduction = adjustment_factor * relative_violation
         new_st = self.st - st_reduction
         
         # Clamp the new st value to a safe range.
@@ -139,10 +140,7 @@ class GPPPOController(PPOController):
         # If st changed, we must update the setpoint for both controllers.
         if old_st != self.st:
             self.setSLA(self.sla) # This will update self.setpoint and self.aux_pi_controller.setpoint
-            print(f"AUTOTUNING ST: 95th perc. error={error_95_percentile:.3f}s. Relative error={relative_error:.2%}. st: {old_st:.3f} -> {self.st:.3f}")
-
-        # Clear the history to start collecting fresh errors for the next tuning interval.
-        self._sla_violation_errors.clear()
+            print(f"AUTOTUNING ST: 95th perc. violation={violation_95th_percentile:.3f}s. Relative violation={relative_violation:.2%}. st: {old_st:.3f} -> {self.st:.3f}")
 
     def control(self, t):
         # Chiama il controllo base del PPO controller
@@ -162,36 +160,13 @@ class GPPPOController(PPOController):
             # First step, use current error
             previous_error = 0
         
-        # Current error for next step
+        # Record SLA violations for ST auto-tuning, based on the immutable SLA goal
+        if current_rt > self.sla:
+            self._sla_violation_history.append(current_rt - self.sla)
+
+        # Current error for next step (used for internal PI controller logic)
         current_error = current_rt - setpoint
         
-        # Record SLA violations for ST auto-tuning
-        if current_error > 0:
-            self._sla_violation_errors.append(current_error)
-
-        print(f"Current setpoing: {setpoint:.3f}")
-
-        # Calculate PI compensation using the auxiliary controller
-        class MockMonitoring:
-            """Mocks the monitoring object to feed a specific RT to the aux controller."""
-            def __init__(self, rt):
-                self._rt = rt
-            def getRT(self):
-                return self._rt
-
-        # Synchronize state and feed the previous RT to the auxiliary controller
-        self.aux_pi_controller.cores = self.cores # Set current core count
-        self.aux_pi_controller.setMonitoring(MockMonitoring(self.prev_rt))
-        
-        # Get the ideal number of cores recommended by the PI controller
-        self.aux_pi_controller.control(t)  # This sets aux_pi_controller.cores
-        ideal_pi_cores = self.aux_pi_controller.cores
-
-        # The compensation is the difference between the PI ideal and current state
-        pi_compensation = ideal_pi_cores - ppo_cores
-        
-        print(f"PI compensation: ideal_cores={ideal_pi_cores:.3f} current_cores={ppo_cores:.3f} delta={pi_compensation:.3f}")
-
         # Determine compensation and store training data only after PI guardrail is active
         actual_compensation = 0
         compensation_source = "None"
@@ -239,16 +214,16 @@ class GPPPOController(PPOController):
         self.prev_users = num_users
         self.prev_rt = current_rt
 
-        # Autotuning ogni 20 step
-        if self.step_cnt > 0 and self.step_cnt % 20 == 0:
+        # Autotuning every 30 steps
+        if self.step_cnt > 0 and self.step_cnt % 30 == 0:
             self.auto_tune_st()
 
         # Log
         if self.enable_log:
             rt = self.monitoring.getRT()
             gp_status = f"GP:{len(self.gp_data_buffer)}/{self.gp_min_samples}" if len(self.gp_data_buffer) < self.gp_min_samples else "GP:ACTIVE"
-            line = (f"{t:.1f}s lat={rt:.2f} cores={self.cores} "
-                   f"compensation={guardrail_compensation:.2f} ({compensation_source}) "
+            line = (f"{t:.1f}s lat={rt:.2f} cores={self.cores:.2f} "
+                   f"comp={guardrail_compensation:.2f} ({compensation_source}) "
                    f"rew={self.prev_reward:.2f} {gp_status} st={self.st:.3f} BC={self.aux_pi_controller.BC:.3f} DC={self.aux_pi_controller.DC:.3f}")
             print(line)
             with open(self.log_path, "a") as f:
@@ -259,6 +234,7 @@ class GPPPOController(PPOController):
         super().reset()
         self.gp_data_buffer.clear()
         self.gp_train_counter = 0
+        self._sla_violation_history.clear()
         if hasattr(self, 'aux_pi_controller'):
             self.aux_pi_controller.reset()
         
