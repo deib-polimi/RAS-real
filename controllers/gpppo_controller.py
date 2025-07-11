@@ -194,6 +194,7 @@ class GPPPOController(PPOController):
         # Phased compensation: Use direct PID until GP is trained, then switch to GP.
         actual_compensation = 0
         compensation_source = "None"
+        uncompensated_ppo_cores = self.cores # Save PPO output before compensation
 
         # Phase 2: Use GP if trained and active.
         if self.step_cnt >= self.gp_train_start and len(self.gp_data_buffer) >= self.gp_min_samples:
@@ -204,12 +205,18 @@ class GPPPOController(PPOController):
             actual_compensation = pi_compensation # Can be positive or negative
             compensation_source = "PI"
 
-        # Apply compensation to the cores already set by PPO
-        final_cores = self.cores + actual_compensation
-        final_cores = max(self.min_cores, min(self.max_cores, final_cores))
-        self.cores = final_cores
-
-        print(f"Final cores: {self.cores}, PPO cores: {self.cores - actual_compensation}, {compensation_source} compensation: {actual_compensation}")
+        # Apply compensation ONLY for under-provisioning to prioritize robustness over efficiency.
+        # This prevents reducing cores when PPO over-provisions, acting as a safety guardrail.
+        if previous_error > 0:
+            # Apply compensation to the cores already set by PPO
+            final_cores = uncompensated_ppo_cores + actual_compensation
+            self.cores = max(self.min_cores, min(self.max_cores, final_cores))
+            print(f"Final cores: {self.cores:.2f}, PPO: {uncompensated_ppo_cores:.2f}, Comp: {actual_compensation:.2f} ({compensation_source}) -> Under-provisioning")
+        else:
+            # For over-provisioning or on-target, we don't compensate to avoid removing cores aggressively.
+            actual_compensation = 0.0 # Reset for logging
+            compensation_source = "None" # Reset for logging
+            print(f"Final cores: {self.cores:.2f}, PPO: {uncompensated_ppo_cores:.2f}, No Comp -> Over-provisioning or on-target")
 
         # Update GP training counter
         self.gp_train_counter += 1
