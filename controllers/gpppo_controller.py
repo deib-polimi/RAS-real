@@ -23,7 +23,7 @@ class GPPPOController(PPOController):
                  train=True, burst_mode="none", burst_threshold_q=20,
                  burst_threshold_r=30, burst_extra=4, trend_features=False,
                  enable_log=True, log_dir="./logs",
-                 bc=0.1, dc=0.2, # PI Controller parameters (ridotti per essere meno aggressivi)
+                 bc=5.0, dc=10.0, # PI Controller parameters (increased for responsiveness)
                  gp_train_start=100, gp_min_samples=300, gp_train_freq=50,
                  gp_max_buffer_size=300, gp_percentile=95):
         super().__init__(period, init_cores, min_cores=min_cores,
@@ -107,7 +107,7 @@ class GPPPOController(PPOController):
         #return float(percentile_value.item())
         return float(mean)
 
-    def auto_tune_pi(self, window=20, high_err=0.05, low_err=0.01, up_factor=1.2, down_factor=0.8, max_gain=2.0, min_gain=0.01):
+    def auto_tune_pi(self, window=20, high_err=0.05, low_err=0.01, up_factor=1.2, down_factor=0.8, max_gain=25.0, min_gain=1.0):
         """Autotuning semplice: aumenta BC/DC se errore medio alto, li riduce se basso."""
         if not hasattr(self, '_error_history'):
             self._error_history = []
