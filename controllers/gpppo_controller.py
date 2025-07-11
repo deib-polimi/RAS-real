@@ -194,29 +194,27 @@ class GPPPOController(PPOController):
         # Phased compensation: Use direct PID until GP is trained, then switch to GP.
         actual_compensation = 0
         compensation_source = "None"
-        uncompensated_ppo_cores = self.cores # Save PPO output before compensation
+        ppo_cores = self.cores # This is the decision from the PPO controller
 
         # Phase 2: Use GP if trained and active.
         if self.step_cnt >= self.gp_train_start and len(self.gp_data_buffer) >= self.gp_min_samples:
-            actual_compensation =  gp_compensation 
+            actual_compensation =  gp_compensation
             compensation_source = "GP"
         # Phase 1: Use direct PID before GP is ready.
         else:
-            actual_compensation = pi_compensation # Can be positive or negative
+            actual_compensation = pi_compensation
             compensation_source = "PI"
 
-        # Apply compensation ONLY for under-provisioning to prioritize robustness over efficiency.
-        # This prevents reducing cores when PPO over-provisions, acting as a safety guardrail.
-        if previous_error > 0:
-            # Apply compensation to the cores already set by PPO
-            final_cores = uncompensated_ppo_cores + actual_compensation
-            self.cores = max(self.min_cores, min(self.max_cores, final_cores))
-            print(f"Final cores: {self.cores:.2f}, PPO: {uncompensated_ppo_cores:.2f}, Comp: {actual_compensation:.2f} ({compensation_source}) -> Under-provisioning")
-        else:
-            # For over-provisioning or on-target, we don't compensate to avoid removing cores aggressively.
-            actual_compensation = 0.0 # Reset for logging
-            compensation_source = "None" # Reset for logging
-            print(f"Final cores: {self.cores:.2f}, PPO: {uncompensated_ppo_cores:.2f}, No Comp -> Over-provisioning or on-target")
+        # The guardrail should only ADD cores, never remove them.
+        # We only apply positive compensation to what PPO decided.
+        # If compensation is negative, we ignore it.
+        guardrail_compensation = max(0, actual_compensation)
+
+        # The final decision is the PPO's choice plus any positive (upward) compensation.
+        final_cores = ppo_cores + guardrail_compensation
+        self.cores = max(self.min_cores, min(self.max_cores, final_cores))
+
+        print(f"Final cores: {self.cores:.2f}, PPO: {ppo_cores:.2f}, Comp: {actual_compensation:.2f} -> Guardrail: {guardrail_compensation:.2f} ({compensation_source})")
 
         # Update GP training counter
         self.gp_train_counter += 1
