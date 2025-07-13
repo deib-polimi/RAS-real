@@ -25,7 +25,9 @@ class GPPPOController(PPOController):
                  enable_log=True, log_dir="./logs",
                  bc=5.0, dc=10.0, # PI Controller parameters (increased for responsiveness)
                  gp_train_start=100, gp_min_samples=300, gp_train_freq=50,
-                 gp_max_buffer_size=300, gp_percentile=95, pi_start_time=0):
+                 gp_max_buffer_size=300, gp_percentile=95, pi_start_time=0,
+                 gp_perf_window=100, gp_error_threshold=0.2,
+                 st_max=0.95, st_relaxation_factor=0.005, st_violation_threshold=0.05):
         super().__init__(period, init_cores, min_cores=min_cores,
                         max_cores=max_cores, st=st, name=name,
                         train=train, burst_mode=burst_mode,
@@ -41,6 +43,17 @@ class GPPPOController(PPOController):
         self.gp_train_freq = gp_train_freq
         self.gp_percentile = gp_percentile
         self.pi_start_time = pi_start_time
+
+        # GP performance monitoring
+        self.gp_perf_window = gp_perf_window
+        self.gp_error_threshold = gp_error_threshold
+        self.gp_performance_errors = deque(maxlen=self.gp_perf_window)
+        self.is_gp_trusted = True
+
+        # ST auto-tuning parameters
+        self.st_max = st_max
+        self.st_relaxation_factor = st_relaxation_factor
+        self.st_violation_threshold = st_violation_threshold
 
         # For ST auto-tuning using a receding horizon (circular buffer)
         self._sla_violation_history = deque(maxlen=100)
@@ -115,6 +128,8 @@ class GPPPOController(PPOController):
         """
         Autotuning for the 'st' parameter based on the 95th percentile of SLA violations.
         This makes the controller more conservative if the SLA is consistently violated.
+        It also allows 'st' to relax and increase back towards a maximum value if
+        performance is consistently good.
         It uses a receding horizon of past violations.
         """
         if len(self._sla_violation_history) < min_samples:
@@ -128,19 +143,29 @@ class GPPPOController(PPOController):
             relative_violation = violation_95th_percentile / self.sla
         else:
             relative_violation = 0
-            
+
         old_st = self.st
-        # The reduction is proportional to how badly we are missing the SLA.
-        st_reduction = adjustment_factor * relative_violation
-        new_st = self.st - st_reduction
+        new_st = self.st
+        reason = ""
+
+        # If violations are significant, become more conservative (reduce st)
+        if relative_violation > self.st_violation_threshold:
+            st_reduction = adjustment_factor * relative_violation
+            new_st = self.st - st_reduction
+            reason = f"High violation ({relative_violation:.1%})"
+        # Otherwise, if performance is good, relax st (increase it)
+        else:
+            st_increase = self.st_relaxation_factor
+            new_st = self.st + st_increase
+            reason = "Good perf"
         
-        # Clamp the new st value to a safe range.
-        self.st = max(min_st, new_st)
+        # Clamp the new st value to a safe range [min_st, self.st_max].
+        self.st = max(min_st, min(self.st_max, new_st))
 
         # If st changed, we must update the setpoint for both controllers.
         if old_st != self.st:
             self.setSLA(self.sla) # This will update self.setpoint and self.aux_pi_controller.setpoint
-            print(f"AUTOTUNING ST: 95th perc. violation={violation_95th_percentile:.3f}s. Relative violation={relative_violation:.2%}. st: {old_st:.3f} -> {self.st:.3f}")
+            print(f"AUTOTUNING ST: {reason}. st: {old_st:.3f} -> {self.st:.3f}")
 
     def control(self, t):
         # Chiama il controllo base del PPO controller
@@ -194,25 +219,43 @@ class GPPPOController(PPOController):
         actual_compensation = 0
         compensation_source = "None"
         if t >= self.pi_start_time:
-            # Store data for GP training using PREVIOUS step values (cause-effect relationship)
-            if hasattr(self, 'prev_action_ppo') and self.step_cnt >= self.gp_train_start:
+            # Store data for GP training only in under-provisioning cases (PI suggests adding cores)
+            if hasattr(self, 'prev_action_ppo') and self.step_cnt >= self.gp_train_start and pi_compensation > 0:
                 gp_input = np.array([self.prev_action_ppo, self.prev_users, self.prev_rt])
-                print(f"GP input: {gp_input} → PI compensation: {pi_compensation:.3f}")
                 self.gp_data_buffer.append((gp_input, pi_compensation))
 
-            # Phased compensation: Use direct PID until GP is trained, then switch to GP.
-            # Phase 2: Use GP if trained and active.
-            if self.step_cnt >= self.gp_train_start and len(self.gp_data_buffer) >= self.gp_min_samples:
-                print(f"Predicting GP with {len(self.gp_data_buffer)} samples") 
+            is_gp_trained = len(self.gp_data_buffer) >= self.gp_min_samples
+
+            # Phase 2: Use GP if trained and trusted
+            if is_gp_trained and self.is_gp_trusted:
+                print(f"Predicting GP with {len(self.gp_data_buffer)} samples")
                 X_pred = np.array([self.prev_action_ppo, self.prev_users, self.prev_rt]).reshape(1, -1)
                 gp_compensation = self._get_gp_prediction(X_pred, self.prev_rt)
-                print(f"GP compensation: {gp_compensation}")
                 actual_compensation = gp_compensation
                 compensation_source = "GP"
-            # Phase 1: Use direct PID before GP is ready.
+
+                # Monitor GP performance
+                self.gp_performance_errors.append(abs(current_error))
+                if len(self.gp_performance_errors) == self.gp_performance_errors.maxlen:
+                    error_95th_p = np.percentile(list(self.gp_performance_errors), 95)
+                    if error_95th_p > self.gp_error_threshold:
+                        self.is_gp_trusted = False
+                        self.gp_data_buffer.clear()
+                        self.gp_performance_errors.clear()
+                        self.aux_pi_controller.reset() # Reset PI state for fresh start
+                        print(f"GP perf degraded (95th-p error {error_95th_p:.3f} > {self.gp_error_threshold:.3f}). Fallback to PI.")
+                        # Fallback to PI compensation for this step
+                        actual_compensation = pi_compensation
+                        compensation_source = "PI"
+
+            # Phase 1: Use direct PID before GP is ready or if it's untrusted
             else:
                 actual_compensation = pi_compensation
                 compensation_source = "PI"
+                # If GP was untrusted, check if it has been retrained and can be trusted again
+                if not self.is_gp_trusted and is_gp_trained:
+                    self.is_gp_trusted = True
+                    print("GP has been retrained. Activating again.")
 
         # The guardrail should only ADD cores, never remove them.
         guardrail_compensation = max(0, actual_compensation)
@@ -244,7 +287,10 @@ class GPPPOController(PPOController):
         # Log
         if self.enable_log:
             rt = self.monitoring.getRT()
-            gp_status = f"GP:{len(self.gp_data_buffer)}/{self.gp_min_samples}" if len(self.gp_data_buffer) < self.gp_min_samples else "GP:ACTIVE"
+            gp_status = f"GP:{len(self.gp_data_buffer)}/{self.gp_min_samples}"
+            if len(self.gp_data_buffer) >= self.gp_min_samples:
+                gp_status = "GP:ACTIVE" if self.is_gp_trusted else "GP:RE-TRAINING"
+                
             line = (f"{t:.1f}s lat={rt:.2f} cores={self.cores:.2f} "
                    f"comp={guardrail_compensation:.2f} ({compensation_source}) "
                    f"rew={self.prev_reward:.2f} {gp_status} st={self.st:.3f} BC={self.aux_pi_controller.BC:.3f} DC={self.aux_pi_controller.DC:.3f}")
@@ -258,6 +304,8 @@ class GPPPOController(PPOController):
         self.gp_data_buffer.clear()
         self.gp_train_counter = 0
         self._sla_violation_history.clear()
+        self.gp_performance_errors.clear()
+        self.is_gp_trusted = True
         if hasattr(self, 'aux_pi_controller'):
             self.aux_pi_controller.reset()
         
