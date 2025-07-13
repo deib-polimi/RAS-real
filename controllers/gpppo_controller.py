@@ -219,8 +219,8 @@ class GPPPOController(PPOController):
         actual_compensation = 0
         compensation_source = "None"
         if t >= self.pi_start_time:
-            # Store data for GP training only in under-provisioning cases (PI suggests adding cores)
-            if hasattr(self, 'prev_action_ppo') and self.step_cnt >= self.gp_train_start and pi_compensation > 0:
+            # Store data for GP training using PREVIOUS step values (cause-effect relationship)
+            if hasattr(self, 'prev_action_ppo') and self.step_cnt >= self.gp_train_start:
                 gp_input = np.array([self.prev_action_ppo, self.prev_users, self.prev_rt])
                 self.gp_data_buffer.append((gp_input, pi_compensation))
 
