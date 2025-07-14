@@ -111,18 +111,14 @@ class GPPPOController(PPOController):
         # Gestire setpoint come lista o valore singolo (compatibilità con framework)
         setpoint = self.setpoint[0] if isinstance(self.setpoint, list) else self.setpoint
         
-        # Determine which percentile to use based on error direction
-        error = current_rt - setpoint  # RT too high -> positive error -> add resources
-        if error > 0:  # RT is too high, we want to scale up
-            percentile = self.gp_percentile  # Use lower percentile to be conservative when adding resources
-        else:  # RT is too low, we want to scale down
-            percentile = 100 - self.gp_percentile  # Use higher percentile to be conservative when removing resources
+        # As a guardrail, we are always interested in the conservative upper bound
+        # to prevent under-provisioning. We therefore always use the higher percentile.
+        percentile = self.gp_percentile
         
         # Calculate the percentile value
         percentile_value = norm.ppf(percentile / 100.0, loc=mean, scale=std)
         
-        #return float(percentile_value.item())
-        return float(mean)
+        return float(percentile_value.item())
 
     def auto_tune_st(self, min_samples=10, min_st=0.5, adjustment_factor=0.05):
         """
@@ -244,7 +240,12 @@ class GPPPOController(PPOController):
                         self.gp_performance_errors.clear()
                         self.aux_pi_controller.reset() # Reset PI state for fresh start
                         print(f"GP perf degraded (95th-p error {error_95th_p:.3f} > {self.gp_error_threshold:.3f}). Fallback to PI.")
-                        # Fallback to PI compensation for this step
+                        
+                        # Fallback to PI compensation for this step, recalculating with current metrics
+                        self.aux_pi_controller.cores = ppo_cores
+                        self.aux_pi_controller.setMonitoring(MockMonitoring(current_rt)) # Use fresh RT
+                        self.aux_pi_controller.control(t)
+                        pi_compensation = self.aux_pi_controller.cores - ppo_cores
                         actual_compensation = pi_compensation
                         compensation_source = "PI"
 
