@@ -26,7 +26,7 @@ class GPPPOController(PPOController):
                  bc=5.0, dc=10.0, # PI Controller parameters (increased for responsiveness)
                  gp_train_start=100, gp_min_samples=300, gp_train_freq=50,
                  gp_max_buffer_size=300, gp_percentile=95, pi_start_time=0,
-                 gp_perf_window=100, gp_error_threshold=0.2,
+                 gp_perf_window=100, gp_violation_threshold=0.05, # Threshold for 95th percentile of SLA violations
                  st_max=0.95, st_relaxation_factor=0.005, st_violation_threshold=0.05):
         super().__init__(period, init_cores, min_cores=min_cores,
                         max_cores=max_cores, st=st, name=name,
@@ -46,7 +46,7 @@ class GPPPOController(PPOController):
 
         # GP performance monitoring
         self.gp_perf_window = gp_perf_window
-        self.gp_error_threshold = gp_error_threshold
+        self.gp_violation_threshold = gp_violation_threshold
         self.gp_performance_errors = deque(maxlen=self.gp_perf_window)
         self.is_gp_trusted = True
 
@@ -230,16 +230,18 @@ class GPPPOController(PPOController):
                 actual_compensation = gp_compensation
                 compensation_source = "GP"
 
-                # Monitor GP performance
-                self.gp_performance_errors.append(abs(current_error))
+                # Monitor GP performance by tracking the magnitude of SLA violations
+                sla_violation = max(0, current_rt - self.sla)
+                self.gp_performance_errors.append(sla_violation)
+
                 if len(self.gp_performance_errors) == self.gp_performance_errors.maxlen:
-                    error_95th_p = np.percentile(list(self.gp_performance_errors), 95)
-                    if error_95th_p > self.gp_error_threshold:
+                    violation_95th_p = np.percentile(list(self.gp_performance_errors), 95)
+                    if violation_95th_p > self.gp_violation_threshold:
                         self.is_gp_trusted = False
                         self.gp_data_buffer.clear()
                         self.gp_performance_errors.clear()
                         self.aux_pi_controller.reset() # Reset PI state for fresh start
-                        print(f"GP perf degraded (95th-p error {error_95th_p:.3f} > {self.gp_error_threshold:.3f}). Fallback to PI.")
+                        print(f"GP perf degraded (95th-p violation {violation_95th_p:.3f} > {self.gp_violation_threshold:.3f}). Fallback to PI.")
                         
                         # Fallback to PI compensation for this step, recalculating with current metrics
                         self.aux_pi_controller.cores = ppo_cores
