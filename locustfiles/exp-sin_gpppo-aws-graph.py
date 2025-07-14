@@ -35,7 +35,7 @@ CONFIG = {
             "st" : 1,
             "st_max": 1.0,
             "st_relaxation_factor": 0.005,
-            "st_violation_threshold": 0.05,
+            "st_violation_threshold": 0.02,
             "train" : False,
             "burst_mode" : "none",
             "trend_features" : False,
