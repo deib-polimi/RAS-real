@@ -241,7 +241,11 @@ class GPPPOController(PPOController):
                         self.gp_data_buffer.clear()
                         self.gp_performance_errors.clear()
                         self.aux_pi_controller.reset() # Reset PI state for fresh start
-                        print(f"GP perf degraded (95th-p violation {violation_95th_p:.3f} > {self.gp_violation_threshold:.3f}). Fallback to PI.")
+                        log_msg = f"GP perf degraded (95th-p violation {violation_95th_p:.3f} > {self.gp_violation_threshold:.3f}). Fallback to PI."
+                        print(log_msg)
+                        if self.enable_log:
+                            with open(self.log_path, "a") as f:
+                                f.write(f"EVENT @{t:.1f}s: {log_msg}\n")
                         
                         # Fallback to PI compensation for this step, recalculating with current metrics
                         self.aux_pi_controller.cores = ppo_cores
@@ -291,12 +295,20 @@ class GPPPOController(PPOController):
         if self.enable_log:
             rt = self.monitoring.getRT()
             gp_status = f"GP:{len(self.gp_data_buffer)}/{self.gp_min_samples}"
+            gp_perf_metric_str = ""
+
             if len(self.gp_data_buffer) >= self.gp_min_samples:
                 gp_status = "GP:ACTIVE" if self.is_gp_trusted else "GP:RE-TRAINING"
                 
+                # If GP is active and we have enough data to judge, calculate and show the performance metric
+                if self.is_gp_trusted and len(self.gp_performance_errors) == self.gp_performance_errors.maxlen:
+                    violation_95th_p = np.percentile(list(self.gp_performance_errors), 95)
+                    gp_perf_metric_str = f" gp_viol_p95={violation_95th_p:.3f}"
+
             line = (f"{t:.1f}s lat={rt:.2f} cores={self.cores:.2f} "
                    f"comp={guardrail_compensation:.2f} ({compensation_source}) "
-                   f"rew={self.prev_reward:.2f} {gp_status} st={self.st:.3f} BC={self.aux_pi_controller.BC:.3f} DC={self.aux_pi_controller.DC:.3f}")
+                   f"rew={self.prev_reward:.2f} {gp_status}{gp_perf_metric_str} st={self.st:.3f} "
+                   f"BC={self.aux_pi_controller.BC:.3f} DC={self.aux_pi_controller.DC:.3f}")
             print(line)
             with open(self.log_path, "a") as f:
                 f.write(line + "\n")
