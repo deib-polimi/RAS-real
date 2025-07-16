@@ -34,6 +34,7 @@ CONFIG = {
             "max_cores" : 28,
             "st" : 1,
             "st_max": 1.0,
+            "min_st": 0.01,
             "st_relaxation_factor": 0.005,
             "st_violation_threshold": 0.02,
             "train" : False,
