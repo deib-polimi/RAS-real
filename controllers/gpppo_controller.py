@@ -28,7 +28,7 @@ class GPPPOController(PPOController):
                  gp_max_buffer_size=300, gp_percentile=95, pi_start_time=0,
                  gp_perf_window=100, gp_violation_threshold=0.05, # Threshold for 95th percentile of SLA violations
                  st_max=0.95, st_relaxation_factor=0.005, st_violation_threshold=0.05,
-                 gp_time_period=200): # Period for temporal features
+                 min_st=0.5, gp_time_period=200): # Period for temporal features
         super().__init__(period, init_cores, min_cores=min_cores,
                         max_cores=max_cores, st=st, name=name,
                         train=train, burst_mode=burst_mode,
@@ -56,6 +56,7 @@ class GPPPOController(PPOController):
         self.st_max = st_max
         self.st_relaxation_factor = st_relaxation_factor
         self.st_violation_threshold = st_violation_threshold
+        self.min_st = min_st
 
         # For ST auto-tuning using a receding horizon (circular buffer)
         self._sla_violation_history = deque(maxlen=100)
@@ -122,7 +123,7 @@ class GPPPOController(PPOController):
         
         return float(percentile_value.item())
 
-    def auto_tune_st(self, min_samples=10, min_st=0.5, adjustment_factor=0.05):
+    def auto_tune_st(self, min_samples=10, adjustment_factor=0.05):
         """
         Autotuning for the 'st' parameter based on the 95th percentile of SLA violations.
         This makes the controller more conservative if the SLA is consistently violated.
@@ -157,8 +158,8 @@ class GPPPOController(PPOController):
             new_st = self.st + st_increase
             reason = "Good perf"
         
-        # Clamp the new st value to a safe range [min_st, self.st_max].
-        self.st = max(min_st, min(self.st_max, new_st))
+        # Clamp the new st value to a safe range [self.min_st, self.st_max].
+        self.st = max(self.min_st, min(self.st_max, new_st))
 
         # If st changed, we must update the setpoint for both controllers.
         if old_st != self.st:
