@@ -35,7 +35,7 @@ CONFIG = {
             "st" : 1,
             "st_max": 1.0,
             "st_relaxation_factor": 0.005,
-            "st_violation_threshold": 0.05,
+            "st_violation_threshold": 0.02,
             "train" : False,
             "burst_mode" : "none",
             "trend_features" : False,
@@ -48,7 +48,7 @@ CONFIG = {
             "gp_train_freq": 100,
             "gp_max_buffer_size": 1000,
             "gp_percentile": 99,
-            "pi_start_time": 300
+            "pi_start_time": 150
         }
     }
 }
