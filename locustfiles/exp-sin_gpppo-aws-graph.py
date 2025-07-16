@@ -13,7 +13,7 @@ CONFIG = {
     "wait_time_min": 1,
     "wait_time_max": 1,
     "spawn_rate": 1,
-    "end" : 2200,
+    "end" : 3000,
     "noise_start":150, 
     "noise_scale":1.4,
     "noise_type":"avg",
@@ -46,7 +46,7 @@ CONFIG = {
             "gp_train_start": 150,
             "gp_min_samples": 500,
             "gp_train_freq": 100,
-            "gp_max_buffer_size": 1000,
+            "gp_max_buffer_size": 5000,
             "gp_percentile": 99,
             "pi_start_time": 150
         }
