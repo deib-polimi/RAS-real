@@ -9,6 +9,8 @@ from collections import deque
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import Matern, WhiteKernel
 from scipy.stats import norm
+import threading
+import copy
 from .ppocontroller import PPOController, _ActorCritic, _RolloutBuf
 from .controltheoretical import CTControllerScaleX
 
@@ -74,6 +76,12 @@ class GPPPOController(PPOController):
         self.gp_data_buffer = deque(maxlen=gp_max_buffer_size)
         self.gp_train_counter = 0
         
+        # Async training variables
+        self.gp_training_lock = threading.Lock()
+        self.gp_training_thread = None
+        self.gp_training_in_progress = False
+        self.gp_training_data = None
+        
         # Track previous step for proper PID compensation
         self.prev_error = 0.0
         self.prev_action_ppo = 0.0
@@ -92,24 +100,72 @@ class GPPPOController(PPOController):
             self.aux_pi_controller.setSLA(sla)
 
     def _train_gp(self):
-        """Train the GP model if enough data is available."""
-        print(f"Training GP with {len(self.gp_data_buffer)} samples")
-        if len(self.gp_data_buffer) < self.gp_min_samples:
-            return
+        """Train the GP model asynchronously if enough data is available."""
+        with self.gp_training_lock:
+            if self.gp_training_in_progress:
+                print("GP training already in progress, skipping...")
+                return
+                
+            if len(self.gp_data_buffer) < self.gp_min_samples:
+                return
 
-        X = np.array([x for x, _ in self.gp_data_buffer])
-        y = np.array([y for _, y in self.gp_data_buffer])
-        self.gpr.fit(X, y)
+            # Copy data for thread safety
+            training_data = copy.deepcopy(list(self.gp_data_buffer))
+            self.gp_training_in_progress = True
+            self.gp_training_data = training_data
+
+        print(f"Starting async GP training with {len(training_data)} samples")
+        
+        # Start training in background thread
+        self.gp_training_thread = threading.Thread(target=self._train_gp_worker, args=(training_data,))
+        self.gp_training_thread.daemon = True
+        self.gp_training_thread.start()
+        
         self.gp_train_counter = 0
 
-        if self.enable_log:
-            with open(self.gp_log_path, "a") as f:
-                f.write(f"GP trained with {len(X)} samples\n")
+    def _train_gp_worker(self, training_data):
+        """Worker function for GP training in background thread."""
+        try:
+            X = np.array([x for x, _ in training_data])
+            y = np.array([y for _, y in training_data])
+            
+            # Create a new GP instance for training
+            kernel = Matern(length_scale=np.ones(self._GP_INPUT_DIM), nu=2.5) + \
+                    WhiteKernel(noise_level=0.1)
+            new_gpr = GaussianProcessRegressor(kernel=kernel, normalize_y=True)
+            
+            # Train the model
+            new_gpr.fit(X, y)
+            
+            # Update the main GP model thread-safely
+            with self.gp_training_lock:
+                self.gpr = new_gpr
+                self.gp_training_in_progress = False
+                self.gp_training_data = None
+            
+            print(f"Async GP training completed with {len(X)} samples")
+            
+            if self.enable_log:
+                with open(self.gp_log_path, "a") as f:
+                    f.write(f"Async GP trained with {len(X)} samples\n")
+                    
+        except Exception as e:
+            print(f"Error in async GP training: {e}")
+            with self.gp_training_lock:
+                self.gp_training_in_progress = False
+                self.gp_training_data = None
 
     def _get_gp_prediction(self, X_pred, current_rt):
         """Get GP prediction using the specified percentile, considering error direction."""
-        # Get mean and standard deviation of the prediction
-        mean, std = self.gpr.predict(X_pred, return_std=True)
+        # Thread-safe access to GP model
+        with self.gp_training_lock:
+            if self.gp_training_in_progress:
+                # If training is in progress, return 0 compensation to avoid using stale model
+                print("GP training in progress, skipping prediction")
+                return 0.0
+                
+            # Get mean and standard deviation of the prediction
+            mean, std = self.gpr.predict(X_pred, return_std=True)
         
         # Gestire setpoint come lista o valore singolo (compatibilità con framework)
         setpoint = self.setpoint[0] if isinstance(self.setpoint, list) else self.setpoint
@@ -324,6 +380,16 @@ class GPPPOController(PPOController):
     def reset(self):
         """Reset controller state."""
         super().reset()
+        
+        # Stop any ongoing GP training
+        with self.gp_training_lock:
+            self.gp_training_in_progress = False
+            self.gp_training_data = None
+        
+        # Wait for training thread to finish if it's running
+        if self.gp_training_thread and self.gp_training_thread.is_alive():
+            self.gp_training_thread.join(timeout=1.0)  # Wait max 1 second
+        
         self.gp_data_buffer.clear()
         self.gp_train_counter = 0
         self._sla_violation_history.clear()
