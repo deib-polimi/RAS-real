@@ -9,10 +9,38 @@ from collections import deque
 from sklearn.gaussian_process import GaussianProcessRegressor
 from sklearn.gaussian_process.kernels import Matern, WhiteKernel
 from scipy.stats import norm
-import threading
+import multiprocessing as mp
+import pickle
 import copy
 from .ppocontroller import PPOController, _ActorCritic, _RolloutBuf
 from .controltheoretical import CTControllerScaleX
+
+def _train_gp_worker_process(training_data, result_queue):
+    """Worker function for GP training in separate process."""
+    try:
+        X = np.array([x for x, _ in training_data])
+        y = np.array([y for _, y in training_data])
+        
+        # Create a new GP instance for training
+        kernel = Matern(length_scale=np.ones(5), nu=2.5) + \
+                WhiteKernel(noise_level=0.1)
+        new_gpr = GaussianProcessRegressor(kernel=kernel, normalize_y=True)
+        
+        # Train the model
+        new_gpr.fit(X, y)
+        
+        # Serialize the trained model with error handling
+        try:
+            model_bytes = pickle.dumps(new_gpr, protocol=pickle.HIGHEST_PROTOCOL)
+        except Exception as e:
+            result_queue.put(('error', f'Serialization failed: {e}', 0))
+            return
+        
+        # Send result back to main process
+        result_queue.put(('success', model_bytes, len(X)))
+        
+    except Exception as e:
+        result_queue.put(('error', str(e), 0))
 
 class GPPPOController(PPOController):
     """PPO autoscaler with GP-based compensation and an auxiliary PI controller."""
@@ -77,11 +105,11 @@ class GPPPOController(PPOController):
         self.gp_train_counter = 0
         
         # Async training variables
-        self.gp_training_lock = threading.Lock()
-        self.gp_training_thread = None
+        self.gp_training_process = None
         self.gp_training_in_progress = False
-        self.gp_training_data = None
         self.gp_training_start_time = None
+        self.gp_training_queue = mp.Queue()
+        self.gp_training_result_queue = mp.Queue()
         
         # Track previous step for proper PID compensation
         self.prev_error = 0.0
@@ -102,89 +130,113 @@ class GPPPOController(PPOController):
 
     def _train_gp(self):
         """Train the GP model asynchronously if enough data is available."""
-        # Check if previous training thread is still running
-        if self.gp_training_thread and self.gp_training_thread.is_alive():
-            # Check if training is taking too long (timeout after 30 seconds)
-            if self.gp_training_start_time and (time.time() - self.gp_training_start_time) > 30:
-                print("GP training timeout, forcing reset...")
-                with self.gp_training_lock:
-                    self.gp_training_in_progress = False
-                    self.gp_training_data = None
-                    self.gp_training_start_time = None
-            else:
-                print("Previous GP training thread still running, skipping...")
-                return
+        # Safety check: ensure no training is already in progress
+        if self.gp_training_in_progress:
+            print("GP training already in progress, skipping...")
+            return
             
-        with self.gp_training_lock:
-            if self.gp_training_in_progress:
-                print("GP training already in progress, skipping...")
+        # Check if previous training process is still running
+        if self.gp_training_process and self.gp_training_process.is_alive():
+            # Check if training is taking too long (timeout after 60 seconds)
+            if self.gp_training_start_time and (time.time() - self.gp_training_start_time) > 60:
+                print("GP training timeout, forcing termination...")
+                self._terminate_training_process()
+            else:
+                print("Previous GP training process still running, skipping...")
                 return
                 
-            if len(self.gp_data_buffer) < self.gp_min_samples:
-                return
+        if len(self.gp_data_buffer) < self.gp_min_samples:
+            return
 
-            # Copy data for thread safety
-            training_data = copy.deepcopy(list(self.gp_data_buffer))
-            self.gp_training_in_progress = True
-            self.gp_training_data = training_data
+        # Copy data for process safety
+        training_data = copy.deepcopy(list(self.gp_data_buffer))
+        self.gp_training_in_progress = True
+        self.gp_training_start_time = time.time()
 
         print(f"Starting async GP training with {len(training_data)} samples")
         
-        # Start training in background thread
-        self.gp_training_thread = threading.Thread(target=self._train_gp_worker, args=(training_data,))
-        self.gp_training_thread.daemon = True
-        self.gp_training_thread.start()
+        # Start training in background process
+        self.gp_training_process = mp.Process(
+            target=_train_gp_worker_process, 
+            args=(training_data, self.gp_training_result_queue)
+        )
+        self.gp_training_process.daemon = True  # Ensure process is terminated when main process exits
+        self.gp_training_process.start()
         
-        self.gp_training_start_time = time.time()
         self.gp_train_counter = 0
 
-    def _train_gp_worker(self, training_data):
-        """Worker function for GP training in background thread."""
-        try:
-            X = np.array([x for x, _ in training_data])
-            y = np.array([y for _, y in training_data])
-            
-            # Create a new GP instance for training
-            kernel = Matern(length_scale=np.ones(self._GP_INPUT_DIM), nu=2.5) + \
-                    WhiteKernel(noise_level=0.1)
-            new_gpr = GaussianProcessRegressor(kernel=kernel, normalize_y=True)
-            
-            # Train the model
-            new_gpr.fit(X, y)
-            
-            # Update the main GP model thread-safely
-            training_time = time.time() - self.gp_training_start_time
-            with self.gp_training_lock:
-                self.gpr = new_gpr
-                self.gp_training_in_progress = False
-                self.gp_training_data = None
-                self.gp_training_start_time = None
-            
-            print(f"Async GP training completed with {len(X)} samples in {training_time:.2f}s")
-            
-            if self.enable_log:
-                with open(self.gp_log_path, "a") as f:
-                    f.write(f"Async GP trained with {len(X)} samples\n")
+    def _terminate_training_process(self):
+        """Safely terminate the training process and clean up."""
+        if self.gp_training_process and self.gp_training_process.is_alive():
+            try:
+                self.gp_training_process.terminate()
+                self.gp_training_process.join(timeout=10.0)  # Increased timeout
+                
+                # Force kill if still alive
+                if self.gp_training_process.is_alive():
+                    print("Force killing GP training process...")
+                    self.gp_training_process.kill()
+                    self.gp_training_process.join(timeout=5.0)
                     
-        except Exception as e:
-            print(f"Error in async GP training: {e}")
-            with self.gp_training_lock:
+            except Exception as e:
+                print(f"Error terminating training process: {e}")
+            finally:
                 self.gp_training_in_progress = False
-                self.gp_training_data = None
+                self.gp_training_start_time = None
+                self.gp_training_process = None
+
+    def _check_training_result(self):
+        """Check if training process has completed and update model."""
+        if not self.gp_training_in_progress or not self.gp_training_process:
+            return
+            
+        # Check if process is still running
+        if self.gp_training_process.is_alive():
+            return
+            
+        # Process has finished, check result
+        try:
+            # Use timeout to avoid blocking indefinitely
+            result = self.gp_training_result_queue.get(timeout=0.1)
+            status, data, num_samples = result
+            
+            if status == 'success':
+                # Deserialize and update the model with error handling
+                try:
+                    new_gpr = pickle.loads(data)
+                    self.gpr = new_gpr
+                    training_time = time.time() - self.gp_training_start_time
+                    print(f"Async GP training completed with {num_samples} samples in {training_time:.2f}s")
+                    
+                    if self.enable_log:
+                        with open(self.gp_log_path, "a") as f:
+                            f.write(f"Async GP trained with {num_samples} samples\n")
+                except Exception as e:
+                    print(f"GP model deserialization failed: {e}")
+                    
+            else:
+                print(f"GP training failed: {data}")
+                
+        except Exception as e:
+            # Queue timeout or other error - this is normal if no result yet
+            if "timeout" not in str(e).lower():
+                print(f"Error checking training result: {e}")
+        finally:
+            # Clean up
+            self.gp_training_in_progress = False
+            self.gp_training_start_time = None
+            self.gp_training_process = None
 
     def _get_gp_prediction(self, X_pred, current_rt):
         """Get GP prediction using the specified percentile, considering error direction."""
-        # Quick check if training is in progress (minimal lock time)
-        with self.gp_training_lock:
-            if self.gp_training_in_progress:
-                print("GP training in progress, skipping prediction")
-                return 0.0
-            # Get a reference to the current model (fast operation)
-            current_gpr = self.gpr
+        # Check if training is in progress
+        if self.gp_training_in_progress:
+            print("GP training in progress, skipping prediction")
+            return 0.0
         
-        # Perform prediction outside the lock (slow operation)
+        # Perform prediction
         try:
-            mean, std = current_gpr.predict(X_pred, return_std=True)
+            mean, std = self.gpr.predict(X_pred, return_std=True)
         except Exception as e:
             print(f"GP prediction error: {e}")
             return 0.0
@@ -364,6 +416,9 @@ class GPPPOController(PPOController):
         if self.gp_train_counter >= self.gp_train_freq:
             self._train_gp()
 
+        # Check if training has completed
+        self._check_training_result()
+
         # Update previous step values for next iteration
         self.prev_error = current_error  # Store the error that caused the PPO action
         if hasattr(self, 'prev_act') and self.prev_act is not None:
@@ -404,14 +459,12 @@ class GPPPOController(PPOController):
         super().reset()
         
         # Stop any ongoing GP training
-        with self.gp_training_lock:
-            self.gp_training_in_progress = False
-            self.gp_training_data = None
-            self.gp_training_start_time = None
+        if self.gp_training_process and self.gp_training_process.is_alive():
+            print("Terminating GP training process...")
+            self._terminate_training_process()
         
-        # Wait for training thread to finish if it's running
-        if self.gp_training_thread and self.gp_training_thread.is_alive():
-            self.gp_training_thread.join(timeout=1.0)  # Wait max 1 second
+        # Clear both queues
+        self._clear_training_queues()
         
         self.gp_data_buffer.clear()
         self.gp_train_counter = 0
@@ -427,7 +480,31 @@ class GPPPOController(PPOController):
         self.prev_users = 0
         self.prev_rt = 0.0
 
+    def _clear_training_queues(self):
+        """Clear all training queues safely."""
+        # Clear result queue
+        while True:
+            try:
+                self.gp_training_result_queue.get_nowait()
+            except:
+                break
+                
+        # Clear training queue (if used in future)
+        while True:
+            try:
+                self.gp_training_queue.get_nowait()
+            except:
+                break
+
     def set_pid_params(self, kp, ki):
         """Update PID parameters."""
         self.kp = kp
-        self.ki = ki 
+        self.ki = ki
+
+    def __del__(self):
+        """Destructor to ensure proper cleanup."""
+        try:
+            if hasattr(self, 'gp_training_process') and self.gp_training_process:
+                self._terminate_training_process()
+        except:
+            pass  # Ignore errors during cleanup 
