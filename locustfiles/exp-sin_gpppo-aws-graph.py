@@ -44,11 +44,12 @@ CONFIG = {
             "bc": 5.0,
             "dc": 10.0,
             "gp_train_start": 150,
-            "gp_min_samples": 500,
+            "gp_min_samples": 300,
             "gp_train_freq": 100,
-            "gp_max_buffer_size": 5000,
-            "gp_percentile": 99,
-            "pi_start_time": 150
+            "gp_max_buffer_size": 500,
+            "gp_percentile": 95,
+            "pi_start_time": 150,
+            "gp_time_period": 200
         }
     }
 }

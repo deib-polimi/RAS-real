@@ -16,7 +16,7 @@ class GPPPOController(PPOController):
     """PPO autoscaler with GP-based compensation and an auxiliary PI controller."""
 
     # GP parameters
-    _GP_INPUT_DIM = 3  # [RL action, num_users, response_time]
+    _GP_INPUT_DIM = 5  # [RL action, num_users, response_time, sin_t, cos_t]
 
     def __init__(self, period, init_cores, *,
                  min_cores=1, max_cores=1000, st=0.8, name=None,
@@ -27,7 +27,8 @@ class GPPPOController(PPOController):
                  gp_train_start=100, gp_min_samples=300, gp_train_freq=50,
                  gp_max_buffer_size=300, gp_percentile=95, pi_start_time=0,
                  gp_perf_window=100, gp_violation_threshold=0.05, # Threshold for 95th percentile of SLA violations
-                 st_max=0.95, st_relaxation_factor=0.005, st_violation_threshold=0.05):
+                 st_max=0.95, st_relaxation_factor=0.005, st_violation_threshold=0.05,
+                 gp_time_period=200): # Period for temporal features
         super().__init__(period, init_cores, min_cores=min_cores,
                         max_cores=max_cores, st=st, name=name,
                         train=train, burst_mode=burst_mode,
@@ -43,6 +44,7 @@ class GPPPOController(PPOController):
         self.gp_train_freq = gp_train_freq
         self.gp_percentile = gp_percentile
         self.pi_start_time = pi_start_time
+        self.gp_time_period = gp_time_period
 
         # GP performance monitoring
         self.gp_perf_window = gp_perf_window
@@ -211,13 +213,17 @@ class GPPPOController(PPOController):
         
         print(f"PI compensation: ideal_cores={ideal_pi_cores:.3f} current_cores={ppo_cores:.3f} delta={pi_compensation:.3f}")
         
+        # Calculate temporal features for GP input
+        sin_t = np.sin(2 * np.pi * t / self.gp_time_period)
+        cos_t = np.cos(2 * np.pi * t / self.gp_time_period)
+        
         # Determine compensation and store training data only after PI guardrail is active
         actual_compensation = 0
         compensation_source = "None"
         if t >= self.pi_start_time:
             # Store data for GP training using PREVIOUS step values (cause-effect relationship)
             if hasattr(self, 'prev_action_ppo') and self.step_cnt >= self.gp_train_start:
-                gp_input = np.array([self.prev_action_ppo, self.prev_users, self.prev_rt])
+                gp_input = np.array([self.prev_action_ppo, self.prev_users, self.prev_rt, sin_t, cos_t])
                 self.gp_data_buffer.append((gp_input, pi_compensation))
 
             is_gp_trained = len(self.gp_data_buffer) >= self.gp_min_samples
@@ -225,7 +231,7 @@ class GPPPOController(PPOController):
             # Phase 2: Use GP if trained and trusted
             if is_gp_trained and self.is_gp_trusted:
                 print(f"Predicting GP with {len(self.gp_data_buffer)} samples")
-                X_pred = np.array([self.prev_action_ppo, self.prev_users, self.prev_rt]).reshape(1, -1)
+                X_pred = np.array([self.prev_action_ppo, self.prev_users, self.prev_rt, sin_t, cos_t]).reshape(1, -1)
                 gp_compensation = self._get_gp_prediction(X_pred, self.prev_rt)
                 actual_compensation = gp_compensation
                 compensation_source = "GP"
@@ -238,7 +244,8 @@ class GPPPOController(PPOController):
                     violation_95th_p = np.percentile(list(self.gp_performance_errors), 95)
                     if violation_95th_p > self.gp_violation_threshold:
                         self.is_gp_trusted = False
-                        self.gp_data_buffer.clear()
+                        # Keep the training data - only reset performance monitoring
+                        # self.gp_data_buffer.clear()  # REMOVED: preserve training data
                         self.gp_performance_errors.clear()
                         self.aux_pi_controller.reset() # Reset PI state for fresh start
                         log_msg = f"GP perf degraded (95th-p violation {violation_95th_p:.3f} > {self.gp_violation_threshold:.3f}). Fallback to PI."
