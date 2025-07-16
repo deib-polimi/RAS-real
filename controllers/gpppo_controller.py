@@ -81,6 +81,7 @@ class GPPPOController(PPOController):
         self.gp_training_thread = None
         self.gp_training_in_progress = False
         self.gp_training_data = None
+        self.gp_training_start_time = None
         
         # Track previous step for proper PID compensation
         self.prev_error = 0.0
@@ -101,6 +102,19 @@ class GPPPOController(PPOController):
 
     def _train_gp(self):
         """Train the GP model asynchronously if enough data is available."""
+        # Check if previous training thread is still running
+        if self.gp_training_thread and self.gp_training_thread.is_alive():
+            # Check if training is taking too long (timeout after 30 seconds)
+            if self.gp_training_start_time and (time.time() - self.gp_training_start_time) > 30:
+                print("GP training timeout, forcing reset...")
+                with self.gp_training_lock:
+                    self.gp_training_in_progress = False
+                    self.gp_training_data = None
+                    self.gp_training_start_time = None
+            else:
+                print("Previous GP training thread still running, skipping...")
+                return
+            
         with self.gp_training_lock:
             if self.gp_training_in_progress:
                 print("GP training already in progress, skipping...")
@@ -121,6 +135,7 @@ class GPPPOController(PPOController):
         self.gp_training_thread.daemon = True
         self.gp_training_thread.start()
         
+        self.gp_training_start_time = time.time()
         self.gp_train_counter = 0
 
     def _train_gp_worker(self, training_data):
@@ -138,12 +153,14 @@ class GPPPOController(PPOController):
             new_gpr.fit(X, y)
             
             # Update the main GP model thread-safely
+            training_time = time.time() - self.gp_training_start_time
             with self.gp_training_lock:
                 self.gpr = new_gpr
                 self.gp_training_in_progress = False
                 self.gp_training_data = None
+                self.gp_training_start_time = None
             
-            print(f"Async GP training completed with {len(X)} samples")
+            print(f"Async GP training completed with {len(X)} samples in {training_time:.2f}s")
             
             if self.enable_log:
                 with open(self.gp_log_path, "a") as f:
@@ -157,15 +174,20 @@ class GPPPOController(PPOController):
 
     def _get_gp_prediction(self, X_pred, current_rt):
         """Get GP prediction using the specified percentile, considering error direction."""
-        # Thread-safe access to GP model
+        # Quick check if training is in progress (minimal lock time)
         with self.gp_training_lock:
             if self.gp_training_in_progress:
-                # If training is in progress, return 0 compensation to avoid using stale model
                 print("GP training in progress, skipping prediction")
                 return 0.0
-                
-            # Get mean and standard deviation of the prediction
-            mean, std = self.gpr.predict(X_pred, return_std=True)
+            # Get a reference to the current model (fast operation)
+            current_gpr = self.gpr
+        
+        # Perform prediction outside the lock (slow operation)
+        try:
+            mean, std = current_gpr.predict(X_pred, return_std=True)
+        except Exception as e:
+            print(f"GP prediction error: {e}")
+            return 0.0
         
         # Gestire setpoint come lista o valore singolo (compatibilità con framework)
         setpoint = self.setpoint[0] if isinstance(self.setpoint, list) else self.setpoint
@@ -385,6 +407,7 @@ class GPPPOController(PPOController):
         with self.gp_training_lock:
             self.gp_training_in_progress = False
             self.gp_training_data = None
+            self.gp_training_start_time = None
         
         # Wait for training thread to finish if it's running
         if self.gp_training_thread and self.gp_training_thread.is_alive():
