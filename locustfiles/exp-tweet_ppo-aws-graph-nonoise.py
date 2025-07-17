@@ -14,9 +14,9 @@ CONFIG = {
     "wait_time_min": 1,
     "wait_time_max": 1,
     "spawn_rate": 1,
-    "end" : 1200,
-    "noise_start": 150,
-    "noise_scale":1.8,
+    "end" : 600,
+    "noise_start": -1,
+    "noise_scale":1.0,
     "noise_type":"avg",
     "generator" : {
         "class" : "TweetGen",
