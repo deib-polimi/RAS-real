@@ -7,7 +7,6 @@ CONFIG = {
         "headers" : {"Content-Type": "application/json"},
         "path" : "/function/graph_mst"
     },
-    
     "cpu_range_start" : 0,
     "monitoring_window": 30,
     "app_sla": 0.25,
@@ -26,19 +25,37 @@ CONFIG = {
         }
     },
     "controller" : {
-        "class" : "PPOController",
+        "class" : "GPPPOController",
         "params" : {
-            "period" : 3, 
+            "period" : 1, 
             "init_cores" : 1, 
             "min_cores" : 0.5,
             "max_cores" : 28,
+            "st" : 1,
+            "st_max": 1.0,
+            "min_st": 0.5,
+            "st_relaxation_factor": 0.005,
+            "st_violation_threshold": 0.02,
             "train" : False,
-            "enable_log": False
+            "burst_mode" : "none",
+            "trend_features" : False,
+            "enable_log" : True,
+            "log_dir" : "./logs",
+            "bc": 5.0,
+            "dc": 10.0,
+            "gp_train_start": 150,
+            "gp_min_samples": 500,
+            "gp_train_freq": 200,
+            "gp_max_buffer_size": 20000,
+            "gp_percentile": 95,
+            "pi_start_time": 150,
+            "gp_time_period": 200
         }
     }
 }
 
+
 EXP_NAME = __file__.split("/")[-1].split(".")[0]
 
 from base_experiment import *
-setup(EXP_NAME, CONFIG)
+setup(EXP_NAME, CONFIG) 
