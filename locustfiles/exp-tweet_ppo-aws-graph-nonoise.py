@@ -16,7 +16,7 @@ CONFIG = {
     "spawn_rate": 1,
     "end" : 1200,
     "noise_start": 150,
-    "noise_scale":1.4,
+    "noise_scale":1.8,
     "noise_type":"avg",
     "generator" : {
         "class" : "TweetGen",
