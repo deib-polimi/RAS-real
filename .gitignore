@@ -222,3 +222,18 @@ poetry.toml
 .ionide
 
 # End of https://www.toptal.com/developers/gitignore/api/macos,python,visualstudiocode
+
+### Claude Code ###
+# Personal/local overrides — never commit
+.claude/settings.local.json
+# Ephemeral artifacts produced by /plan, /triage, codex runs
+.claude/tmp/
+.claude/cache/
+.claude/codex-runs/
+
+### Project artifacts ###
+# Test caches (already partially covered above, but explicit for clarity)
+.pytest_cache/
+.coverage
+htmlcov/
+
