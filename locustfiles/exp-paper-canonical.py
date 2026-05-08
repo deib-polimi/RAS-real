@@ -49,7 +49,8 @@ CONFIG = {
     # ramp:   noise_scale grows linearly from noise_start to noise_drift_end
     # bursty: noise_scale toggles ON/OFF every (noise_drift_period/2) seconds
     "noise_start": 300,
-    "noise_scale": 2.5,            # ×3.5 payload at drift → μ_eff drops to ~5/core
+    "noise_scale": 2.0,            # ×3 payload at drift → μ_eff drops to ~6.5/core
+                                    # (recoverable with c=10 inside max_cores=16)
     "noise_type": "avg",
     "noise_drift_kind": "step",
     "noise_drift_end": 900,        # used only when kind="ramp"
@@ -69,20 +70,16 @@ CONFIG = {
     "controller": {
         "class": "GPPPOController",
         "params": {
-            # Base controller. Sizing rationale (post run #1 root-cause analysis):
-            #   - init_cores=2: PPO starts SATURATED (ρ=1.54 at λ=40, μ=13/core).
-            #     Forces real shortfalls in the first 10 ticks → GP gets signal.
+            # Base controller. Sizing rationale (post run #2 root-cause analysis):
+            #   - init_cores=4: cold-start at ρ=0.77 (stable) at λ=40, μ=13/core.
+            #     Avoids cold-start violations now that the PI safety net is OFF.
             #   - min_cores=0.0: removes the "+1 core bonus" from controller_loop's
-            #     `quotaCores = max(min_cores, cores-setCores)` line, which
-            #     forced the quota container to receive ~10% of traffic on a
-            #     full extra core whenever `cores` was integer (capacity = c+1
-            #     instead of c). With min_cores=0 the quota is bypassed for
-            #     integer cores and only routes the true fractional remainder.
+            #     `quotaCores = max(min_cores, cores-setCores)` line.
             #   - max_cores=16: matches the calibrated host (16 cores tested).
-            #   - st_max=min_st=1.0: disables auto-tune ST (a confound — it
-            #     was doing the GP's job by dynamically tightening the setpoint).
+            #   - st_max=min_st=1.0: disables auto-tune ST (confound — it was
+            #     doing the GP's job by dynamically tightening the setpoint).
             "period": 1,
-            "init_cores": 2,
+            "init_cores": 4,
             "min_cores": 0.0,
             "max_cores": 16,
             "st": 1.0,
@@ -95,10 +92,17 @@ CONFIG = {
             "enable_log": True,
             "log_dir": "./logs",
 
-            # Auxiliary PI (post-tuning values)
-            "bc": 0.3,
-            "dc": 0.1,
-            "pi_anti_windup": True,               # CT-R2
+            # Auxiliary PI — DISABLED for run #3 (PPO+GP-only ablation).
+            # bc=dc=0 makes the PI's `cores_unsat = xc_prec + 0` a fixed point at
+            # min_cores=0, so `pi_compensation = 0 - ppo_cores < 0`, and the
+            # guardrail `max(0, comp)` zeroes it. Net effect: PI is muted in
+            # both Phase 1 (pre-GP) and the GP-distrust fallback path.
+            # NOTE: a residual seam remains in CTControllerScaleX:69-70 (PI
+            # floors `cores ≥ init_cores` for the first 20 ticks). For a fully
+            # clean ablation we would add a `pi_enabled` flag — deferred.
+            "bc": 0.0,
+            "dc": 0.0,
+            "pi_anti_windup": False,
             "pi_e_clip": 10.0,
             "pi_error_form": "linear",
             "pi_rt_deadband_frac": 0.30,
@@ -118,13 +122,17 @@ CONFIG = {
             "gp_trust_mode": "outcome",           # SAFE-R3 ("calibration") optional
             "gp_distrust_dwell": 0,               # SAFE-R1 (set ≥30 for paper)
 
-            # The three Pareto knobs (paper headline)
+            # The three Pareto knobs (paper headline).
+            # adaptive_train DISABLED for run #3: with async training time
+            # (~1.05s) ≥ tick (1s), drift-detection retriggered retraining on
+            # every tick, leaving the GP perpetually in-training (predict→0).
+            # Now retraining only follows gp_train_freq=50 schedule.
             "gp_percentile": 95,                  # β
             "gp_lookahead_horizon": 5,            # H
-            "gp_adaptive_train": True,            # E (drift-aware eviction)
-            "gp_drift_threshold": 1.5,
-            "gp_min_train_interval": 10,
-            "gp_eviction_keep": 40,
+            "gp_adaptive_train": False,           # E disabled (was the loop bug)
+            "gp_drift_threshold": 1.5,            # unused with adaptive_train=False
+            "gp_min_train_interval": 10,          # unused with adaptive_train=False
+            "gp_eviction_keep": 0,                # unused with adaptive_train=False
         },
     },
 }
