@@ -35,9 +35,12 @@ CONFIG = {
 
     "end": 1200,
 
-    # Drift: pending calibration. 1.5 is current best guess (recoverable in 16 cores).
+    # Drift: noise_scale=1.3 (intermediate between baseline 0 and severe 2.0).
+    # Hypothesis: μ_eff ≈ 3-4/core → 16-core capacity ≈ 48-64 req/s, just enough
+    # for λ_closed=40 with margin. Saturated PPO will waste cost; bidir GP should
+    # scale down. UNCALIBRATED — first empirical data point.
     "noise_start": 300,
-    "noise_scale": 1.5,
+    "noise_scale": 1.3,
     "noise_type": "avg",
     "noise_drift_kind": "step",
     "noise_drift_end": 900,

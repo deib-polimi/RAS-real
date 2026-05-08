@@ -38,9 +38,9 @@ CONFIG = {
 
     "end": 1200,
 
-    # Drift: pending calibration. Must match exp-paper-baseline-ppo.py.
+    # Drift: noise_scale=1.3 — must match exp-paper-baseline-ppo.py.
     "noise_start": 300,
-    "noise_scale": 1.5,
+    "noise_scale": 1.3,
     "noise_type": "avg",
     "noise_drift_kind": "step",
     "noise_drift_end": 900,
