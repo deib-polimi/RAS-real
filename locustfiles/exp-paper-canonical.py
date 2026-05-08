@@ -49,7 +49,7 @@ CONFIG = {
     # ramp:   noise_scale grows linearly from noise_start to noise_drift_end
     # bursty: noise_scale toggles ON/OFF every (noise_drift_period/2) seconds
     "noise_start": 300,
-    "noise_scale": 1.5,
+    "noise_scale": 2.5,            # ×3.5 payload at drift → μ_eff drops to ~5/core
     "noise_type": "avg",
     "noise_drift_kind": "step",
     "noise_drift_end": 900,        # used only when kind="ramp"
@@ -57,22 +57,37 @@ CONFIG = {
     "seed": 42,
 
     # Stationary λ — the only source of variability is the μ drift above.
+    # λ=40 user pushes the system close to saturation pre-drift (ρ≈0.77 at c=4)
+    # so the GP target ("sla_shortfall") sees non-zero values during the
+    # transient and can actually learn — at λ=22 the system was over-provisioned
+    # at any feasible c, leaving the GP with target=0 forever.
     "generator": {
         "class": "StationaryGen",
-        "params": {"lam": 22},
+        "params": {"lam": 40},
     },
 
     "controller": {
         "class": "GPPPOController",
         "params": {
-            # Base controller (init/max derived from tools/calibrate_mu.py:
-            # μ_eff/core ≈ 13 req/s; c=8 is the smallest setting that keeps
-            # mean_RT < SLA at λ=22 user; c=16 is the largest tested point).
+            # Base controller. Sizing rationale (post run #1 root-cause analysis):
+            #   - init_cores=2: PPO starts SATURATED (ρ=1.54 at λ=40, μ=13/core).
+            #     Forces real shortfalls in the first 10 ticks → GP gets signal.
+            #   - min_cores=0.0: removes the "+1 core bonus" from controller_loop's
+            #     `quotaCores = max(min_cores, cores-setCores)` line, which
+            #     forced the quota container to receive ~10% of traffic on a
+            #     full extra core whenever `cores` was integer (capacity = c+1
+            #     instead of c). With min_cores=0 the quota is bypassed for
+            #     integer cores and only routes the true fractional remainder.
+            #   - max_cores=16: matches the calibrated host (16 cores tested).
+            #   - st_max=min_st=1.0: disables auto-tune ST (a confound — it
+            #     was doing the GP's job by dynamically tightening the setpoint).
             "period": 1,
-            "init_cores": 8,
-            "min_cores": 1.0,
+            "init_cores": 2,
+            "min_cores": 0.0,
             "max_cores": 16,
             "st": 1.0,
+            "st_max": 1.0,
+            "min_st": 1.0,
             "train": False,
             "deterministic_eval": True,           # RL-R3
             "burst_mode": "none",
