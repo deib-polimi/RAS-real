@@ -92,7 +92,10 @@ class GPPPOController(PPOController):
                  gp_perf_window=100, gp_violation_threshold=0.05, # Threshold for 95th percentile of SLA violations
                  st_max=0.95, st_relaxation_factor=0.005, st_violation_threshold=0.05,
                  min_st=0.5, gp_time_period=200, # Period for temporal features
-                 gp_target_mode="pi_compensation", # GP target choice: "pi_compensation" (default, A3 bug) or "sla_shortfall" (mock GP-R2 fix)
+                 gp_target_mode="pi_compensation", # GP target choice:
+                 #   "pi_compensation" (legacy, A3 bug) — target = PI delta
+                 #   "sla_shortfall"   (GP-R2 fix)      — target = cores·max(0, RT-SLA)/SLA  (≥ 0, monotone-up)
+                 #   "signed_shortfall" (B1)            — target = cores·(RT-SLA)/SLA       (signed, bidirectional guardrail)
                  gp_async=True, # If False, train GP synchronously in main process (use for fast simulators where mp.Process spawn is too slow)
                  gp_normalize_inputs=False, # If True, fit StandardScaler on GP inputs (mock GP-R1 fix)
                  gp_trust_mode="outcome", # "outcome" (default, current) or "calibration" (mock SAFE-R3): distrust when posterior σ is mis-calibrated wrt observed targets
@@ -476,6 +479,59 @@ class GPPPOController(PPOController):
             self.setSLA(self.sla) # This will update self.setpoint and self.aux_pi_controller.setpoint
             print(f"AUTOTUNING ST: {reason}. st: {old_st:.3f} -> {self.st:.3f}")
 
+    # -------------------------------------------------------------------
+    # Helpers extracted for testability (B1 — bidirectional GP refactor)
+    # -------------------------------------------------------------------
+
+    def _compute_gp_target(self, ppo_cores, current_rt, pi_compensation):
+        """Compute the GP training target for the current tick (immediate, H=0 path).
+
+        Three modes:
+          - 'sla_shortfall' (legacy GP-R2)  : cores·max(0, RT-SLA)/SLA  (≥ 0)
+          - 'signed_shortfall' (B1)         : cores·(RT-SLA)/SLA        (signed)
+          - 'pi_compensation' (legacy A3)   : target = PI delta         (signed)
+
+        The signed_shortfall mode lets the GP learn BOTH directions:
+        positive targets when RT > SLA (need more cores), negative when
+        RT < SLA (have excess cores). Combined with no-clamp guardrail,
+        this makes the GP a true bidirectional safety net for OOD PPO.
+        """
+        if self.gp_target_mode == "sla_shortfall":
+            if current_rt > self.sla and self.sla > 0:
+                return ppo_cores * (current_rt - self.sla) / self.sla
+            return 0.0
+        if self.gp_target_mode == "signed_shortfall":
+            if self.sla > 0:
+                return ppo_cores * (current_rt - self.sla) / self.sla
+            return 0.0
+        # default: "pi_compensation" — already signed by PI's bidirectional nature
+        return pi_compensation
+
+    def _apply_guardrail(self, ppo_cores, actual_compensation):
+        """Combine PPO's choice with the guardrail compensation.
+
+        In signed_shortfall (B1), the compensation can be NEGATIVE → final
+        cores can be BELOW ppo_cores (true bidirectional guardrail). In
+        the legacy monotone-up modes, comp is clamped to ≥ 0 (final ≥ ppo).
+
+        Safety: result is always clipped to [min_cores, max_cores].
+        """
+        if self.gp_target_mode == "signed_shortfall":
+            guardrail_compensation = actual_compensation
+        else:
+            guardrail_compensation = max(0, actual_compensation)
+        final = ppo_cores + guardrail_compensation
+        return max(self.min_cores, min(self.max_cores, final))
+
+    def _uses_lookahead_path(self):
+        """True if the H>0 pending-buffer logic should fire.
+
+        Currently only supported for `sla_shortfall` (the legacy 'worst-RT
+        over horizon' semantics is biased for signed targets). For
+        `signed_shortfall` we always use the immediate H=0 target path.
+        """
+        return self.gp_lookahead_horizon > 0 and self.gp_target_mode == "sla_shortfall"
+
     def control(self, t):
         # Chiama il controllo base del PPO controller
         super().control(t)
@@ -536,8 +592,9 @@ class GPPPOController(PPOController):
             if hasattr(self, 'prev_action_ppo') and self.step_cnt >= self.gp_train_start:
                 gp_input = np.array([self.prev_action_ppo, self.prev_users, self.prev_rt, sin_t, cos_t])
 
-                if self.gp_lookahead_horizon > 0 and self.gp_target_mode == "sla_shortfall":
+                if self._uses_lookahead_path():
                     # Knob H: pending-buffer logic. Append now, observe rt[t..t+H], commit later.
+                    # Currently only enabled for legacy `sla_shortfall` mode (max-RT semantics).
                     self._gp_pending.append({"input": gp_input,
                                               "ppo_cores": ppo_cores,
                                               "rts": []})
@@ -554,14 +611,9 @@ class GPPPOController(PPOController):
                             t_target = 0.0
                         self.gp_data_buffer.append((done["input"], t_target))
                 else:
-                    # Immediate target (H=0 path) — original behaviour.
-                    if self.gp_target_mode == "sla_shortfall":
-                        if current_rt > self.sla and self.sla > 0:
-                            gp_target = ppo_cores * (current_rt - self.sla) / self.sla
-                        else:
-                            gp_target = 0.0
-                    else:
-                        gp_target = pi_compensation
+                    # Immediate (H=0) target via shared helper. Handles all three
+                    # gp_target_mode variants including B1 signed_shortfall.
+                    gp_target = self._compute_gp_target(ppo_cores, current_rt, pi_compensation)
                     self.gp_data_buffer.append((gp_input, gp_target))
 
                 # Mock SAFE-R3: track GP posterior calibration vs observed targets.
@@ -637,10 +689,15 @@ class GPPPOController(PPOController):
                         self.is_gp_trusted = True
                         print("GP has been retrained. Activating again.")
 
-        # The guardrail should only ADD cores, never remove them.
-        guardrail_compensation = max(0, actual_compensation)
-
-        # The final decision is the PPO's choice plus any positive (upward) compensation.
+        # B1: in signed_shortfall mode, guardrail is BIDIRECTIONAL (comp can
+        # be negative → final cores can be BELOW ppo_cores). In legacy modes
+        # (sla_shortfall, pi_compensation) the monotone-up rule is preserved.
+        # Safety bounds [min_cores, max_cores] are always applied.
+        # NOTE: logic is mirrored in `_apply_guardrail` for unit-test access.
+        if self.gp_target_mode == "signed_shortfall":
+            guardrail_compensation = actual_compensation
+        else:
+            guardrail_compensation = max(0, actual_compensation)
         final_cores = ppo_cores + guardrail_compensation
         self.cores = max(self.min_cores, min(self.max_cores, final_cores))
 
