@@ -23,6 +23,10 @@ def _train_gp_worker_process(training_data, result_queue, normalize_inputs=False
     pickle (scaler, gpr) so the main process can transform predictions. Otherwise
     pickle (None, gpr) for backward-compat unpacking.
     """
+    import os as _os
+    pid = _os.getpid()
+    t0 = time.time()
+    print(f"[GP-WORKER] pid={pid} STARTED N={len(training_data)}", flush=True)
     try:
         X = np.array([x for x, _ in training_data])
         y = np.array([y for _, y in training_data])
@@ -40,19 +44,25 @@ def _train_gp_worker_process(training_data, result_queue, normalize_inputs=False
         new_gpr = GaussianProcessRegressor(kernel=kernel, normalize_y=True)
 
         # Train the model
+        t_fit = time.time()
         new_gpr.fit(X_fit, y)
+        print(f"[GP-WORKER] pid={pid} FIT_DONE in {time.time()-t_fit:.2f}s", flush=True)
 
         # Serialize the trained model with error handling
         try:
             model_bytes = pickle.dumps((scaler, new_gpr), protocol=pickle.HIGHEST_PROTOCOL)
+            print(f"[GP-WORKER] pid={pid} PICKLED {len(model_bytes)} bytes", flush=True)
         except Exception as e:
+            print(f"[GP-WORKER] pid={pid} PICKLE_FAIL: {e}", flush=True)
             result_queue.put(('error', f'Serialization failed: {e}', 0))
             return
 
         # Send result back to main process
         result_queue.put(('success', model_bytes, len(X)))
+        print(f"[GP-WORKER] pid={pid} PUT_QUEUE total={time.time()-t0:.2f}s — exiting", flush=True)
 
     except Exception as e:
+        print(f"[GP-WORKER] pid={pid} CRASH: {e}", flush=True)
         result_queue.put(('error', str(e), 0))
 
 class GPPPOController(PPOController):
@@ -198,9 +208,13 @@ class GPPPOController(PPOController):
         """Train the GP model asynchronously if enough data is available."""
         # Safety check: ensure no training is already in progress
         if self.gp_training_in_progress:
-            print("GP training already in progress, skipping...")
+            elapsed = (time.time() - self.gp_training_start_time) if self.gp_training_start_time else 0.0
+            alive = self.gp_training_process.is_alive() if self.gp_training_process else None
+            pid = self.gp_training_process.pid if self.gp_training_process else None
+            exitcode = self.gp_training_process.exitcode if self.gp_training_process else None
+            print(f"[GP-TRAIN] ALREADY_IN_PROGRESS flag=True elapsed={elapsed:.1f}s alive={alive} pid={pid} exit={exitcode}", flush=True)
             return
-            
+
         # Check if previous training process is still running
         if self.gp_training_process and self.gp_training_process.is_alive():
             # Check if training is taking too long (timeout after 60 seconds)
@@ -218,6 +232,7 @@ class GPPPOController(PPOController):
         training_data = copy.deepcopy(list(self.gp_data_buffer))
         self.gp_training_in_progress = True
         self.gp_training_start_time = time.time()
+        print(f"[GP-FLAG] False->True t0={self.gp_training_start_time:.1f} N={len(training_data)}", flush=True)
 
         if not self.gp_async:
             # Synchronous training in main process — used by fast simulators
@@ -238,7 +253,8 @@ class GPPPOController(PPOController):
         )
         self.gp_training_process.daemon = True  # Ensure process is terminated when main process exits
         self.gp_training_process.start()
-        
+        print(f"[GP-TRAIN] LAUNCHED pid={self.gp_training_process.pid} N={len(training_data)} t0={self.gp_training_start_time:.1f}", flush=True)
+
         self.gp_train_counter = 0
 
     def _terminate_training_process(self):
@@ -257,6 +273,8 @@ class GPPPOController(PPOController):
             except Exception as e:
                 print(f"Error terminating training process: {e}")
             finally:
+                _elapsed = (time.time() - self.gp_training_start_time) if self.gp_training_start_time else 0.0
+                print(f"[GP-FLAG] True->False (via _terminate_training_process) elapsed={_elapsed:.1f}s", flush=True)
                 self.gp_training_in_progress = False
                 self.gp_training_start_time = None
                 self.gp_training_process = None
@@ -265,6 +283,18 @@ class GPPPOController(PPOController):
         """Check if training process has completed and update model."""
         if not self.gp_training_in_progress:
             return
+
+        # Per-tick diagnostic snapshot of subprocess state (only when flag True).
+        elapsed = (time.time() - self.gp_training_start_time) if self.gp_training_start_time else 0.0
+        if self.gp_async:
+            alive = self.gp_training_process.is_alive() if self.gp_training_process else None
+            pid = self.gp_training_process.pid if self.gp_training_process else None
+            exitcode = self.gp_training_process.exitcode if self.gp_training_process else None
+            try:
+                qsize = self.gp_training_result_queue.qsize()
+            except NotImplementedError:
+                qsize = "?"
+            print(f"[GP-CHECK] elapsed={elapsed:.1f}s alive={alive} pid={pid} exit={exitcode} qsize={qsize}", flush=True)
 
         # Sync training: result is already in the queue, no process to poll.
         # Async training: skip if subprocess still running.
@@ -303,9 +333,14 @@ class GPPPOController(PPOController):
         except Exception as e:
             # Queue timeout or other error - this is normal if no result yet
             if "timeout" not in str(e).lower():
-                print(f"Error checking training result: {e}")
+                print(f"[GP-CHECK] queue.get error: {e}", flush=True)
+            else:
+                # Queue empty after process is dead → subprocess crashed before put()
+                print(f"[GP-CHECK] queue EMPTY after process exit (likely subprocess crash)", flush=True)
         finally:
             # Clean up
+            _elapsed = (time.time() - self.gp_training_start_time) if self.gp_training_start_time else 0.0
+            print(f"[GP-FLAG] True->False (via _check_training_result) elapsed={_elapsed:.1f}s", flush=True)
             self.gp_training_in_progress = False
             self.gp_training_start_time = None
             self.gp_training_process = None
@@ -337,7 +372,8 @@ class GPPPOController(PPOController):
         """Get GP prediction using the specified percentile, considering error direction."""
         # Check if training is in progress
         if self.gp_training_in_progress:
-            print("GP training in progress, skipping prediction")
+            elapsed = (time.time() - self.gp_training_start_time) if self.gp_training_start_time else 0.0
+            print(f"[GP-PRED] SKIPPED — training stuck for {elapsed:.1f}s", flush=True)
             return 0.0
         
         # Perform prediction
