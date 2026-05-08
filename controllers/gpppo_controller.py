@@ -86,7 +86,9 @@ class GPPPOController(PPOController):
                  gp_eviction_keep=0,              # when drift fires, evict buffer to last K (0=disabled)
                  # ---- aux PI configuration (forwarded to internal CTControllerScaleX) ----
                  pi_anti_windup=False, pi_e_clip=None,
-                 pi_error_form="inverse", pi_rt_deadband_frac=0.0):
+                 pi_error_form="inverse", pi_rt_deadband_frac=0.0,
+                 # ---- forwarded to PPOController parent (mock RL-R3 fix) ----
+                 deterministic_eval=False):
         super().__init__(period, init_cores, min_cores=min_cores,
                         max_cores=max_cores, st=st, name=name,
                         train=train, burst_mode=burst_mode,
@@ -94,7 +96,8 @@ class GPPPOController(PPOController):
                         burst_threshold_r=burst_threshold_r,
                         burst_extra=burst_extra,
                         trend_features=trend_features,
-                        enable_log=enable_log, log_dir=log_dir)
+                        enable_log=enable_log, log_dir=log_dir,
+                        deterministic_eval=deterministic_eval)
 
         # GP parameters
         self.gp_train_start = gp_train_start
