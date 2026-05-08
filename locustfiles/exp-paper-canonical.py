@@ -65,11 +65,13 @@ CONFIG = {
     "controller": {
         "class": "GPPPOController",
         "params": {
-            # Base controller
+            # Base controller (init/max derived from tools/calibrate_mu.py:
+            # μ_eff/core ≈ 13 req/s; c=8 is the smallest setting that keeps
+            # mean_RT < SLA at λ=22 user; c=16 is the largest tested point).
             "period": 1,
-            "init_cores": 1,
+            "init_cores": 8,
             "min_cores": 1.0,
-            "max_cores": 28,
+            "max_cores": 16,
             "st": 1.0,
             "train": False,
             "deterministic_eval": True,           # RL-R3

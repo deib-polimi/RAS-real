@@ -248,7 +248,8 @@ def main():
     p.add_argument("--warmup", type=float, default=15.0)
     p.add_argument("--payload-size", type=int, default=25000)
     p.add_argument("--app-sla", type=float, default=0.25,
-                   help="Used to recommend `st = SLA · μ_eff`.")
+                   help="SLA target — used to pick init_cores (the smallest "
+                        "tested c that already keeps mean_RT below SLA).")
     args = p.parse_args()
 
     if len(args.hosts) < 2:
@@ -270,16 +271,44 @@ def main():
     out_path.write_text(json.dumps({"args": vars(args), "results": results}, indent=2))
     print(f"\n[calibrate] raw → {out_path}")
 
+    _print_recommendations(results, args.app_sla)
+
+
+def _print_recommendations(results: list, sla: float) -> None:
+    """Translate raw measurements into controller knobs the operator should set.
+
+    `st` is *not* derived from μ here: in the controller code
+    `setpoint = SLA · st`, so st is a dimensionless safety factor in [0, 1]
+    (1.0 = track at SLA, 0.8 = 20% margin). Calibration data informs
+    init_cores / max_cores / min_cores, but the choice of margin is
+    independent of μ.
+    """
     mu_vals = [r["mu_fit_per_core"] for r in results
                if r.get("mu_fit_per_core") is not None]
     if mu_vals:
-        mu_med = statistics.median(mu_vals)
-        recommended_st = args.app_sla * mu_med
-        print(f"\n[calibrate] median μ_eff/core = {mu_med:.3f} req/s")
-        print(f"[calibrate] recommended `st` = SLA·μ_eff = "
-              f"{args.app_sla} · {mu_med:.3f} = {recommended_st:.3f}")
+        print(f"\n[calibrate] median μ_eff/core = {statistics.median(mu_vals):.3f} req/s")
     else:
         print("\n[calibrate] no valid μ fits — check workload saturation")
+
+    in_sla = sorted((r for r in results
+                     if r.get("mean_rt") is not None and r["mean_rt"] < sla),
+                    key=lambda r: r["c"])
+    init_c = in_sla[0]["c"] if in_sla else None
+    tested_c = [r["c"] for r in results if r.get("n", 0) > 0]
+    max_c = max(tested_c) if tested_c else None
+
+    print("\n[calibrate] suggested controller knobs (paste into config.json):")
+    print(f"  st           = 1.0     # target RT = SLA exactly. "
+          f"Use 0.8 for a 20% margin.")
+    if init_c is not None:
+        print(f"  init_cores   = {init_c:g}     # smallest tested c with "
+              f"mean_RT < SLA={sla}s")
+    else:
+        print(f"  init_cores   = ?     # NO tested c achieved mean_RT < SLA={sla}s "
+              f"— rerun with larger --cores")
+    if max_c is not None:
+        print(f"  max_cores    = {max_c:g}    # largest c tested successfully")
+    print(f"  min_cores    = 1.0     # let the controller scale down freely")
 
 
 if __name__ == "__main__":
