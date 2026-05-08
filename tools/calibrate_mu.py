@@ -1,34 +1,37 @@
 """Calibrate μ_eff for the cloud Docker plant (graph_set + graph_quota).
 
 Usage:
-    python tools/calibrate_mu.py \
+    python3 tools/calibrate_mu.py \
         --hosts http://localhost:8080 http://localhost:8081 \
         --container graph_set --quota-container graph_quota \
-        --cores 2 4 8 16 --users 22 --duration 60 \
-        --warmup 15 --payload-size 25000
+        --cores 2 4 8 16 --users 22 --duration 60 --warmup 15 \
+        --payload-size 25000 --app-sla 0.25
 
-For each core count c, the script:
-  1. Sets cpuset_cpus on the "set" container and a matching cpu_quota on the
-     "quota" container (replicating controller_loop.py's cgroup logic).
-  2. Launches `users` concurrent worker threads that pound /function/graph_mst
-     with the canonical payload size (no noise) for `duration` seconds, after
-     a `warmup` window that is excluded from statistics.
+For each requested core count `c`, the script:
+  1. Applies cpuset_cpus on the "set" container and a matching cpu_quota on
+     the "quota" container — exactly mirroring controller_loop.py's cgroup
+     layout, with one extra rule: when the fractional component of `c`
+     produces a quota below Docker's CFS floor (1000us) we set cpu_quota=-1
+     to disable the quota cleanly, instead of leaving stale state.
+  2. Spawns `users` concurrent worker threads pounding /function/graph_mst
+     with the canonical payload size for `duration` seconds, after a
+     `warmup` window that is excluded from statistics. Workers route between
+     hosts[0] (set) and hosts[1] (quota) with the same probability rule
+     used by request_maker.py: p_set = set_int / (set_int + quota_frac).
   3. Reports mean RT, P95 RT, throughput X.
-  4. Fits μ_eff per-core using the M/M/c steady-state mean response time:
-         W_M/M/c(λ, c, μ) = 1/μ + Erlang-C(c, ρ) / (c·μ·(1-ρ))
-     We invert this numerically for μ given measured (W, λ, c).
+  4. Fits μ_eff/core via the M/M/c steady-state mean response time, solved
+     numerically with a bisection routine (no scipy dependency).
 
 Output:
   - tools/calibrate_mu_<timestamp>.json   raw measurements
-  - stdout: human-readable table + recommended controller `st` (=SLA·μ_eff)
-
-Requires: requests, docker, numpy, scipy.
+  - stdout: human-readable table + recommended `st = SLA · μ_eff`
 """
 from __future__ import annotations
 
 import argparse
 import json
 import math
+import random
 import statistics
 import threading
 import time
@@ -36,16 +39,53 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
 
 import docker
-import numpy as np
-import requests
-from scipy.optimize import brentq
 
 
-CPU_PERIOD = 100000
+CPU_PERIOD = 100000          # cgroup CFS period (us)
+QUOTA_FLOOR_US = 1000        # Docker's hard minimum for cpu_quota
 
+
+# ---------------------------------------------------------------------------
+# cgroup application
+# ---------------------------------------------------------------------------
+
+def _apply_cgroup(client, set_name: str, quota_name: str, c: float,
+                  cpu_range_start: int = 0):
+    """Apply `c` total cores to the two-container layout.
+
+    containerSet     ← cpuset_cpus  (CPU affinity, integer part)
+    containerQuotas  ← cpu_quota    (CFS quota, fractional part)
+
+    Docker rejects cpu_quota < 1000us (CFS minimum). When the fractional
+    component falls below this floor — including the integer-`c` case where
+    it is exactly zero — we explicitly disable the quota with cpu_quota=-1
+    rather than leaving stale state from a previous call.
+
+    Returns (set_int, quota_frac) so callers can mirror request_maker's
+    routing probability.
+    """
+    set_int = max(1, int(c))
+    quota_frac = max(0.0, c - set_int)
+    quota_us = int(round(quota_frac * CPU_PERIOD))
+
+    cset = client.containers.get(set_name)
+    cquota = client.containers.get(quota_name)
+
+    cset.update(cpuset_cpus=f"{cpu_range_start}-{cpu_range_start + set_int - 1}")
+    if quota_us >= QUOTA_FLOOR_US:
+        cquota.update(cpu_quota=quota_us, cpu_period=CPU_PERIOD)
+    else:
+        cquota.update(cpu_quota=-1)
+
+    return set_int, quota_frac
+
+
+# ---------------------------------------------------------------------------
+# M/M/c steady-state response time + μ inversion (no scipy)
+# ---------------------------------------------------------------------------
 
 def erlang_c(c: int, rho: float) -> float:
-    """Erlang-C blocking probability for an M/M/c queue with utilization rho<1."""
+    """Erlang-C (probability of queueing) for an M/M/c with utilization rho<1."""
     if rho >= 1.0:
         return 1.0
     a = c * rho
@@ -63,34 +103,57 @@ def mmc_mean_response_time(lam: float, c: int, mu: float) -> float:
     return 1.0 / mu + Wq
 
 
-def fit_mu_from_W(W_obs: float, lam: float, c: int, mu_lo: float = 0.1,
-                  mu_hi: float = 1000.0) -> float:
-    """Numerically solve W_M/M/c(λ, c, μ) = W_obs for μ."""
+def _bisect(f, lo: float, hi: float, tol: float = 1e-6,
+            max_iter: int = 200) -> float:
+    """Pure-Python bisection (no scipy). Requires f(lo)·f(hi) < 0."""
+    flo = f(lo)
+    fhi = f(hi)
+    if flo == 0:
+        return lo
+    if fhi == 0:
+        return hi
+    if flo * fhi > 0:
+        raise ValueError(f"No sign change in bracket [{lo},{hi}]")
+    for _ in range(max_iter):
+        mid = 0.5 * (lo + hi)
+        fmid = f(mid)
+        if abs(fmid) < tol or (hi - lo) < tol:
+            return mid
+        if flo * fmid < 0:
+            hi, fhi = mid, fmid
+        else:
+            lo, flo = mid, fmid
+    return 0.5 * (lo + hi)
+
+
+def fit_mu_from_W(W_obs: float, lam: float, c: int,
+                  mu_lo: float = 0.01, mu_hi: float = 10000.0) -> float:
+    """Solve W_M/M/c(lam, c, mu) = W_obs for mu by bisection.
+
+    Bracket auto-expands if the initial range does not contain a sign change.
+    """
     f = lambda mu: mmc_mean_response_time(lam, c, mu) - W_obs
-    # Need f(lo) > 0 and f(hi) < 0 for brentq
-    while f(mu_lo) <= 0 and mu_lo > 1e-4:
+    while f(mu_lo) <= 0 and mu_lo > 1e-6:
         mu_lo /= 2
-    while f(mu_hi) >= 0 and mu_hi < 1e6:
+    while f(mu_hi) >= 0 and mu_hi < 1e8:
         mu_hi *= 2
-    return brentq(f, mu_lo, mu_hi)
+    return _bisect(f, mu_lo, mu_hi)
 
 
-def set_cores(client, set_name: str, quota_name: str, c: int,
-              cpu_range_start: int = 0) -> None:
-    """Apply integer + fractional cores to the two containers (mirror controller_loop)."""
-    set_int = max(1, int(c))
-    quota_frac = max(0.0, c - set_int)
-    cset = client.containers.get(set_name)
-    cquota = client.containers.get(quota_name)
-    cset.update(cpuset_cpus=f"{cpu_range_start}-{cpu_range_start + set_int - 1}")
-    cquota.update(cpu_quota=int(max(1, quota_frac * CPU_PERIOD)),
-                  cpu_period=CPU_PERIOD)
+# ---------------------------------------------------------------------------
+# Worker / measurement
+# ---------------------------------------------------------------------------
 
+def _worker_loop(hosts, path, payload, headers, p_set, stop_event,
+                 latencies, started_at, warmup_s, lock):
+    """One pseudo-user: keep firing requests until stop_event is set.
 
-def worker_loop(host: str, path: str, payload: dict, headers: dict,
-                stop_event: threading.Event, latencies: list, started_at: float,
-                warmup_s: float) -> None:
+    Routes to hosts[0] (set container) with probability p_set, otherwise to
+    hosts[1] (quota container) — same rule as request_maker.run().
+    """
+    import requests
     while not stop_event.is_set():
+        host = hosts[0] if random.random() <= p_set else hosts[1]
         t0 = time.time()
         try:
             requests.post(host + path, json=payload, headers=headers, timeout=30)
@@ -98,15 +161,36 @@ def worker_loop(host: str, path: str, payload: dict, headers: dict,
             continue
         rt = time.time() - t0
         if (t0 - started_at) >= warmup_s:
-            latencies.append(rt)
+            with lock:
+                latencies.append(rt)
+
+
+def _percentile(values, q: float) -> float:
+    """Linear-interpolated percentile (q in [0,100]) without numpy."""
+    if not values:
+        return float("nan")
+    s = sorted(values)
+    if len(s) == 1:
+        return s[0]
+    pos = (q / 100.0) * (len(s) - 1)
+    lo = int(math.floor(pos))
+    hi = int(math.ceil(pos))
+    if lo == hi:
+        return s[lo]
+    return s[lo] + (s[hi] - s[lo]) * (pos - lo)
 
 
 def measure_at(c: float, args, client) -> dict:
-    set_cores(client, args.container, args.quota_container, c, args.cpu_range_start)
-    print(f"[calibrate] c={c}  → cpuset configured, sleeping 5s for cgroup settle …")
+    set_int, quota_frac = _apply_cgroup(
+        client, args.container, args.quota_container, c, args.cpu_range_start)
+    p_set = set_int / (set_int + quota_frac) if (set_int + quota_frac) > 0 else 1.0
+
+    print(f"[calibrate] c={c}  set_int={set_int}  quota_frac={quota_frac:.3f}  "
+          f"p_set={p_set:.3f} → cgroup applied, settling 5s …")
     time.sleep(5)
 
-    latencies: list[float] = []
+    latencies: list = []
+    lock = threading.Lock()
     stop_event = threading.Event()
     started_at = time.time()
     payload = {"size": args.payload_size}
@@ -114,8 +198,9 @@ def measure_at(c: float, args, client) -> dict:
 
     with ThreadPoolExecutor(max_workers=args.users) as pool:
         futures = [
-            pool.submit(worker_loop, args.hosts[0], args.path, payload, headers,
-                        stop_event, latencies, started_at, args.warmup)
+            pool.submit(_worker_loop, args.hosts, args.path, payload, headers,
+                        p_set, stop_event, latencies, started_at, args.warmup,
+                        lock)
             for _ in range(args.users)
         ]
         time.sleep(args.warmup + args.duration)
@@ -126,26 +211,32 @@ def measure_at(c: float, args, client) -> dict:
     if not latencies:
         return {"c": c, "n": 0}
 
-    arr = np.asarray(latencies)
-    mean_rt = float(arr.mean())
-    p95_rt = float(np.percentile(arr, 95))
-    throughput = len(arr) / args.duration
+    mean_rt = statistics.mean(latencies)
+    p95_rt = _percentile(latencies, 95.0)
+    throughput = len(latencies) / args.duration
     try:
         mu_fit = fit_mu_from_W(mean_rt, lam=throughput, c=int(round(c)))
+        mu_per_core = mu_fit
     except (ValueError, RuntimeError) as exc:
-        mu_fit = None
+        mu_per_core = None
         print(f"[calibrate] μ fit failed at c={c}: {exc}")
+
     return {
-        "c": c, "n": len(arr),
+        "c": c, "n": len(latencies),
         "mean_rt": mean_rt, "p95_rt": p95_rt,
         "throughput_X": throughput,
-        "mu_fit_per_core": mu_fit,
+        "mu_fit_per_core": mu_per_core,
     }
 
 
+# ---------------------------------------------------------------------------
+# Main
+# ---------------------------------------------------------------------------
+
 def main():
     p = argparse.ArgumentParser()
-    p.add_argument("--hosts", nargs="+", required=True)
+    p.add_argument("--hosts", nargs="+", required=True,
+                   help="[set_host quota_host] — same order as controller_loop")
     p.add_argument("--path", default="/function/graph_mst")
     p.add_argument("--container", default="graph_set")
     p.add_argument("--quota-container", default="graph_quota")
@@ -159,6 +250,10 @@ def main():
     p.add_argument("--app-sla", type=float, default=0.25,
                    help="Used to recommend `st = SLA · μ_eff`.")
     args = p.parse_args()
+
+    if len(args.hosts) < 2:
+        # If only one host given, route everything there.
+        args.hosts = [args.hosts[0], args.hosts[0]]
 
     client = docker.from_env()
     results = []
