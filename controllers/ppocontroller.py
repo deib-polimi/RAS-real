@@ -52,7 +52,8 @@ class PPOController(Controller):
                  train=True,
                  burst_mode="none", burst_threshold_q=20, burst_threshold_r=30,
                  burst_extra=4, trend_features=False,
-                 enable_log=True, log_dir="./logs"):
+                 enable_log=True, log_dir="./logs",
+                 deterministic_eval=False):
         super().__init__(period=period, init_cores=init_cores, min_cores=min_cores, max_cores=max_cores, st=st, name=name)
         self.train = train
         self.burst_mode = burst_mode
@@ -61,6 +62,8 @@ class PPOController(Controller):
         self.burst_extra = burst_extra
         self.trend_features = trend_features
         self.enable_log = enable_log
+        # Mock RL-R3 fix: when not training, use argmax(logits) instead of sampling
+        self.deterministic_eval = deterministic_eval
 
         os.makedirs(log_dir, exist_ok=True)
         ts = datetime.now().strftime("%Y%m%d-%H%M%S")
@@ -93,7 +96,11 @@ class PPOController(Controller):
         state = self._state()
         logits,val = self.ac(torch.tensor(state,dtype=torch.float32,device=self.device))
         dist=torch.distributions.Categorical(logits=logits)
-        a_idx=int(dist.sample().item()); logp=float(dist.log_prob(torch.tensor(a_idx)))
+        if self.deterministic_eval and not self.train:
+            a_idx = int(torch.argmax(logits).item())
+        else:
+            a_idx = int(dist.sample().item())
+        logp = float(dist.log_prob(torch.tensor(a_idx)))
         val=float(val)
         if self.train and self.prev_state is not None:
             self.buf.store(self.prev_state,self.prev_act,self.prev_logp,self._reward(),False,self.prev_val)

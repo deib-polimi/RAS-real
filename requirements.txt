@@ -7,3 +7,6 @@ casadi
 docker
 torch
 scikit-learn
+
+# Test (kept minimal — TDD per controllers/, no heavy fixture stack)
+pytest
