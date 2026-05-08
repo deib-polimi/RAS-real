@@ -39,12 +39,16 @@ def setup(exp_name, data):
     request = data["request"]
     cpu_range_start = data["cpu_range_start"]
     if "noise_start" not in data or "noise_scale" not in data or "noise_type" not in data:
-        request_maker.setup(monitoring, controller, data["hosts"], request["method"], 
+        request_maker.setup(monitoring, controller, data["hosts"], request["method"],
                         request["headers"], request["data"], request["path"])
     else:
-        request_maker.setup(monitoring, controller, data["hosts"], request["method"], 
+        request_maker.setup(monitoring, controller, data["hosts"], request["method"],
                         request["headers"], request["data"], request["path"],
-                        data["noise_start"],data["noise_scale"],data["noise_type"])
+                        data["noise_start"], data["noise_scale"], data["noise_type"],
+                        _noise_drift_kind=data.get("noise_drift_kind", "step"),
+                        _noise_drift_end=data.get("noise_drift_end"),
+                        _noise_drift_period=data.get("noise_drift_period"),
+                        _seed=data.get("seed"))
         
     controller_loop.setup(controller, data["containerIds"], cpu_range_start)
     printer.setup(monitoring, generator, controller, exp_name, data)

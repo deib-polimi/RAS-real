@@ -4,4 +4,5 @@ from .stepgenerator import StepGen
 from .multigenerator import MultiGenerator
 from .twittergenerator import TweetGen
 from .wikigenerator import WikiGen
+from .stationarygenerator import StationaryGen
 from .generator import Generator
