@@ -13,15 +13,24 @@ from scipy.stats import norm
 import multiprocessing as mp
 import pickle
 import copy
+import tempfile
+from queue import Empty as _QueueEmpty
 from .ppocontroller import PPOController, _ActorCritic, _RolloutBuf
 from .controltheoretical import CTControllerScaleX
 
-def _train_gp_worker_process(training_data, result_queue, normalize_inputs=False):
-    """Worker function for GP training in separate process.
+def _train_gp_worker_process(training_data, result_queue, normalize_inputs=False,
+                              model_path=None):
+    """Worker function for GP training in a separate process.
 
-    If `normalize_inputs=True` (mock GP-R1 fix), fit a StandardScaler on X and
-    pickle (scaler, gpr) so the main process can transform predictions. Otherwise
-    pickle (None, gpr) for backward-compat unpacking.
+    B-fix: pickle the trained `(scaler, gpr)` tuple to `model_path` on disk
+    and put ONLY the path string on `result_queue`. The path is short (~80
+    bytes) so it fits in any pipe buffer — this fixes the deadlock where
+    pickled models > Linux's pipe buffer (~64KB) caused mp.Queue's feeder
+    thread to block the subprocess from exiting (observed in run 3a at
+    t=102 with N=91 → 75627 bytes pickle).
+
+    If `normalize_inputs=True` (mock GP-R1 fix), fit a StandardScaler on X
+    and pickle (scaler, gpr); otherwise pickle (None, gpr).
     """
     import os as _os
     pid = _os.getpid()
@@ -48,17 +57,18 @@ def _train_gp_worker_process(training_data, result_queue, normalize_inputs=False
         new_gpr.fit(X_fit, y)
         print(f"[GP-WORKER] pid={pid} FIT_DONE in {time.time()-t_fit:.2f}s", flush=True)
 
-        # Serialize the trained model with error handling
+        # B-fix: write model to disk, pass path through queue
         try:
-            model_bytes = pickle.dumps((scaler, new_gpr), protocol=pickle.HIGHEST_PROTOCOL)
-            print(f"[GP-WORKER] pid={pid} PICKLED {len(model_bytes)} bytes", flush=True)
+            with open(model_path, "wb") as f:
+                pickle.dump((scaler, new_gpr), f, protocol=pickle.HIGHEST_PROTOCOL)
+            size = _os.path.getsize(model_path)
+            print(f"[GP-WORKER] pid={pid} WROTE {size} bytes to {model_path}", flush=True)
         except Exception as e:
-            print(f"[GP-WORKER] pid={pid} PICKLE_FAIL: {e}", flush=True)
-            result_queue.put(('error', f'Serialization failed: {e}', 0))
+            print(f"[GP-WORKER] pid={pid} WRITE_FAIL: {e}", flush=True)
+            result_queue.put(('error', f'Model write failed: {e}', 0))
             return
 
-        # Send result back to main process
-        result_queue.put(('success', model_bytes, len(X)))
+        result_queue.put(('success', model_path, len(X)))
         print(f"[GP-WORKER] pid={pid} PUT_QUEUE total={time.time()-t0:.2f}s — exiting", flush=True)
 
     except Exception as e:
@@ -186,6 +196,8 @@ class GPPPOController(PPOController):
         self.gp_training_start_time = None
         self.gp_training_queue = mp.Queue()
         self.gp_training_result_queue = mp.Queue()
+        # B-fix: parent owns the on-disk path so it can clean up on success/crash
+        self._pending_model_path = None
         
         # Track previous step for proper PID compensation
         self.prev_error = 0.0
@@ -232,14 +244,18 @@ class GPPPOController(PPOController):
         training_data = copy.deepcopy(list(self.gp_data_buffer))
         self.gp_training_in_progress = True
         self.gp_training_start_time = time.time()
-        print(f"[GP-FLAG] False->True t0={self.gp_training_start_time:.1f} N={len(training_data)}", flush=True)
+        # B-fix: allocate a fresh tempfile path for the worker to write to.
+        fd, self._pending_model_path = tempfile.mkstemp(suffix=".pkl", prefix="gpr-")
+        os.close(fd)
+        print(f"[GP-FLAG] False->True t0={self.gp_training_start_time:.1f} N={len(training_data)} path={self._pending_model_path}", flush=True)
 
         if not self.gp_async:
             # Synchronous training in main process — used by fast simulators
             print(f"Starting SYNC GP training with {len(training_data)} samples")
             try:
                 _train_gp_worker_process(training_data, self.gp_training_result_queue,
-                                          self.gp_normalize_inputs)
+                                          self.gp_normalize_inputs,
+                                          self._pending_model_path)
             finally:
                 self.gp_train_counter = 0
             return
@@ -249,11 +265,12 @@ class GPPPOController(PPOController):
         # Start training in background process
         self.gp_training_process = mp.Process(
             target=_train_gp_worker_process,
-            args=(training_data, self.gp_training_result_queue, self.gp_normalize_inputs)
+            args=(training_data, self.gp_training_result_queue,
+                  self.gp_normalize_inputs, self._pending_model_path)
         )
         self.gp_training_process.daemon = True  # Ensure process is terminated when main process exits
         self.gp_training_process.start()
-        print(f"[GP-TRAIN] LAUNCHED pid={self.gp_training_process.pid} N={len(training_data)} t0={self.gp_training_start_time:.1f}", flush=True)
+        print(f"[GP-TRAIN] LAUNCHED pid={self.gp_training_process.pid} N={len(training_data)} t0={self.gp_training_start_time:.1f} path={self._pending_model_path}", flush=True)
 
         self.gp_train_counter = 0
 
@@ -273,18 +290,22 @@ class GPPPOController(PPOController):
             except Exception as e:
                 print(f"Error terminating training process: {e}")
             finally:
-                _elapsed = (time.time() - self.gp_training_start_time) if self.gp_training_start_time else 0.0
-                print(f"[GP-FLAG] True->False (via _terminate_training_process) elapsed={_elapsed:.1f}s", flush=True)
-                self.gp_training_in_progress = False
-                self.gp_training_start_time = None
-                self.gp_training_process = None
+                self._cleanup_pending_model_path()
+                self._reset_training_state(reason="terminated by watchdog")
 
     def _check_training_result(self):
-        """Check if training process has completed and update model."""
+        """Check if training has produced a result; load the model if so.
+
+        A-fix: drain the queue regardless of `is_alive()`. mp.Queue's feeder
+        thread blocks the subprocess from exiting until the parent drains
+        the pipe — gating on `is_alive()` is therefore the deadlock root
+        cause (run 3a t=102 with N=91 stayed alive=True for 60+s with
+        qsize=1). Use `get_nowait()` so empty queue is fast (no 0.1s wait).
+        """
         if not self.gp_training_in_progress:
             return
 
-        # Per-tick diagnostic snapshot of subprocess state (only when flag True).
+        # Per-tick diagnostic snapshot.
         elapsed = (time.time() - self.gp_training_start_time) if self.gp_training_start_time else 0.0
         if self.gp_async:
             alive = self.gp_training_process.is_alive() if self.gp_training_process else None
@@ -296,54 +317,63 @@ class GPPPOController(PPOController):
                 qsize = "?"
             print(f"[GP-CHECK] elapsed={elapsed:.1f}s alive={alive} pid={pid} exit={exitcode} qsize={qsize}", flush=True)
 
-        # Sync training: result is already in the queue, no process to poll.
-        # Async training: skip if subprocess still running.
-        if self.gp_async and (not self.gp_training_process or self.gp_training_process.is_alive()):
-            return
-            
-        # Process has finished, check result
+        # A-fix: try to drain the queue regardless of subprocess liveness.
         try:
-            # Use timeout to avoid blocking indefinitely
-            result = self.gp_training_result_queue.get(timeout=0.1)
-            status, data, num_samples = result
-            
-            if status == 'success':
-                # Deserialize and update the model with error handling
-                try:
-                    payload = pickle.loads(data)
-                    # Backward-compat: payload may be (scaler, gpr) tuple or just gpr
-                    if isinstance(payload, tuple) and len(payload) == 2:
-                        new_scaler, new_gpr = payload
-                    else:
-                        new_scaler, new_gpr = None, payload
-                    self.gpr = new_gpr
-                    self._x_scaler = new_scaler
-                    training_time = time.time() - self.gp_training_start_time
-                    print(f"Async GP training completed with {num_samples} samples in {training_time:.2f}s")
-                    
-                    if self.enable_log:
-                        with open(self.gp_log_path, "a") as f:
-                            f.write(f"Async GP trained with {num_samples} samples\n")
-                except Exception as e:
-                    print(f"GP model deserialization failed: {e}")
-                    
-            else:
-                print(f"GP training failed: {data}")
-                
-        except Exception as e:
-            # Queue timeout or other error - this is normal if no result yet
-            if "timeout" not in str(e).lower():
-                print(f"[GP-CHECK] queue.get error: {e}", flush=True)
-            else:
-                # Queue empty after process is dead → subprocess crashed before put()
-                print(f"[GP-CHECK] queue EMPTY after process exit (likely subprocess crash)", flush=True)
-        finally:
-            # Clean up
-            _elapsed = (time.time() - self.gp_training_start_time) if self.gp_training_start_time else 0.0
-            print(f"[GP-FLAG] True->False (via _check_training_result) elapsed={_elapsed:.1f}s", flush=True)
-            self.gp_training_in_progress = False
-            self.gp_training_start_time = None
-            self.gp_training_process = None
+            result = self.gp_training_result_queue.get_nowait()
+        except _QueueEmpty:
+            # No result yet. If the subprocess has died WITHOUT producing
+            # one, it crashed before put — clean up. Otherwise wait for
+            # the next tick.
+            if (self.gp_async and self.gp_training_process
+                    and not self.gp_training_process.is_alive()):
+                exitcode = self.gp_training_process.exitcode
+                print(f"[GP-CHECK] subprocess dead exit={exitcode} qsize=0 — likely crash", flush=True)
+                self._cleanup_pending_model_path()
+                self._reset_training_state(reason="subprocess died without result")
+            return
+
+        # Got a result.
+        status, payload_data, num_samples = result
+        if status == 'success':
+            # B-fix: payload_data is a path on disk, not bytes.
+            try:
+                with open(payload_data, "rb") as f:
+                    payload = pickle.load(f)
+                if isinstance(payload, tuple) and len(payload) == 2:
+                    new_scaler, new_gpr = payload
+                else:
+                    new_scaler, new_gpr = None, payload
+                self.gpr = new_gpr
+                self._x_scaler = new_scaler
+                training_time = time.time() - self.gp_training_start_time
+                print(f"Async GP training completed with {num_samples} samples in {training_time:.2f}s")
+                if self.enable_log:
+                    with open(self.gp_log_path, "a") as f:
+                        f.write(f"Async GP trained with {num_samples} samples\n")
+            except Exception as e:
+                print(f"GP model load failed: {e}")
+        else:
+            print(f"GP training failed: {payload_data}")
+
+        self._cleanup_pending_model_path()
+        self._reset_training_state(reason="result received")
+
+    def _cleanup_pending_model_path(self):
+        """Remove the on-disk model file (B-fix) — best effort."""
+        if self._pending_model_path:
+            try:
+                os.unlink(self._pending_model_path)
+            except OSError:
+                pass
+            self._pending_model_path = None
+
+    def _reset_training_state(self, reason="unknown"):
+        """Centralize the gp_training_in_progress True->False transition."""
+        _elapsed = (time.time() - self.gp_training_start_time) if self.gp_training_start_time else 0.0
+        print(f"[GP-FLAG] True->False ({reason}) elapsed={_elapsed:.1f}s", flush=True)
+        self.gp_training_in_progress = False
+        self.gp_training_start_time = None
+        self.gp_training_process = None
 
     def _detect_drift_in_buffer(self) -> bool:
         """Detect drift via RT distribution shift (z-score window comparison).
