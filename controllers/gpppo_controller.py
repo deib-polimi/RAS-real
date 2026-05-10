@@ -235,10 +235,15 @@ class GPPPOController(PPOController):
             error_form=pi_error_form, rt_deadband_frac=pi_rt_deadband_frac,
         )
         
-        # Initialize GP
+        # Initialize GP. In risk_violation mode the model will be a
+        # GaussianProcessClassifier installed by the first retrain — keep
+        # gpr=None until then so the predict path is correctly disabled.
         kernel = Matern(length_scale=np.ones(self._GP_INPUT_DIM), nu=2.5) + \
                 WhiteKernel(noise_level=0.1)
-        self.gpr = GaussianProcessRegressor(kernel=kernel, normalize_y=True)
+        if gp_target_mode == "risk_violation":
+            self.gpr = None
+        else:
+            self.gpr = GaussianProcessRegressor(kernel=kernel, normalize_y=True)
         self.gp_data_buffer = deque(maxlen=gp_max_buffer_size)
         self.gp_train_counter = 0
         
@@ -643,14 +648,22 @@ class GPPPOController(PPOController):
 
         sklearn GaussianProcessClassifier exposes predict_proba; σ is operationally
         defined as predictive entropy (binary, in [0, 1] bits). Falls back gracefully
-        if the model is a regressor (legacy mode coexistence).
+        if the model is a regressor (legacy mode coexistence) or if the GPC was
+        fitted on a single-class buffer (predict_proba returns shape (n,) not (n,2)).
         """
         if self.gpr is None:
             return 0.0, 1.0  # max uncertainty when no model
         try:
             X_in = self._x_scaler.transform(X) if self._x_scaler is not None else X
             if hasattr(self.gpr, "predict_proba"):
-                p = float(self.gpr.predict_proba(X_in)[0, 1])
+                proba = np.atleast_2d(self.gpr.predict_proba(X_in))
+                if proba.shape[-1] < 2:
+                    # Single-class GPC → p equals the only class label seen.
+                    only_class = (int(self.gpr.classes_[0])
+                                  if hasattr(self.gpr, "classes_") else 0)
+                    p = float(only_class)
+                else:
+                    p = float(proba[0, 1])
             else:
                 # Legacy regressor: clip prediction to [0,1] as a degenerate proxy
                 p = float(np.clip(self.gpr.predict(X_in)[0], 0.0, 1.0))
