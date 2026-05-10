@@ -64,6 +64,17 @@ class Monitoring:
             return 0.0
         return float(np.percentile(self.rts, 95))
 
+    def getThroughput(self):
+        """Request rate over the rolling window: count(rts) / window (req/s).
+
+        Distinct from getArrivalRate (du/dt user delta) which is ≈0 in a
+        closed-loop stationary regime. Used by the M/M/c floor (S1.13)
+        as the true λ̂ signal.
+        """
+        if not self.rts or self.window <= 0:
+            return 0.0
+        return float(len(self.rts) / self.window)
+
     def getQueueLen(self):
         if not self.allUsers or not self.allCores:
             return 0.0

@@ -107,13 +107,14 @@ def test_worker_writes_model_to_disk_path(gpppo_worker, tmp_path):
     assert payload == model_path
     assert os.path.exists(payload), "worker did not write model to the given path"
 
-    # File on disk must be the pickled (scaler, gpr) tuple
+    # File on disk must be the pickled (scaler, gpr, mode_tag) 3-tuple (S1.15).
     with open(payload, "rb") as f:
         loaded = pickle.load(f)
-    assert isinstance(loaded, tuple) and len(loaded) == 2
-    scaler, gpr = loaded
+    assert isinstance(loaded, tuple) and len(loaded) == 3
+    scaler, gpr, mode_tag = loaded
     assert scaler is None  # normalize_inputs=False
     assert gpr is not None
+    assert isinstance(mode_tag, str), "mode_tag must be a string"
 
     # Sanity: queue payload (path) is well under pipe-buffer limit
     encoded_size = len(pickle.dumps(("success", payload, n)))
@@ -122,7 +123,7 @@ def test_worker_writes_model_to_disk_path(gpppo_worker, tmp_path):
 
 
 def test_worker_with_normalize_inputs_pickles_scaler(gpppo_worker, tmp_path):
-    """B-fix preserves the (scaler, gpr) tuple semantics when normalize_inputs=True."""
+    """S1.15 preserves the (scaler, gpr, mode_tag) tuple when normalize_inputs=True."""
     rng = np.random.default_rng(7)
     training_data = [
         (rng.normal(size=5), float(rng.normal()))
@@ -136,6 +137,9 @@ def test_worker_with_normalize_inputs_pickles_scaler(gpppo_worker, tmp_path):
     status, payload, _ = q.get(timeout=2.0)
     assert status == "success"
     with open(payload, "rb") as f:
-        scaler, gpr = pickle.load(f)
+        loaded = pickle.load(f)
+    assert isinstance(loaded, tuple) and len(loaded) == 3
+    scaler, gpr, mode_tag = loaded
     assert scaler is not None, "scaler must be pickled when normalize_inputs=True"
     assert gpr is not None
+    assert isinstance(mode_tag, str)

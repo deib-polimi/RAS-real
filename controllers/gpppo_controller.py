@@ -1,13 +1,14 @@
 import os
 import time
+import json
 import numpy as np
 import torch
 import torch.nn as nn
 import torch.optim as optim
 from datetime import datetime
 from collections import deque
-from sklearn.gaussian_process import GaussianProcessRegressor
-from sklearn.gaussian_process.kernels import Matern, WhiteKernel
+from sklearn.gaussian_process import GaussianProcessRegressor, GaussianProcessClassifier
+from sklearn.gaussian_process.kernels import Matern, WhiteKernel, RBF
 from sklearn.preprocessing import StandardScaler
 from scipy.stats import norm
 import multiprocessing as mp
@@ -19,23 +20,20 @@ from .ppocontroller import PPOController, _ActorCritic, _RolloutBuf
 from .controltheoretical import CTControllerScaleX
 
 def _train_gp_worker_process(training_data, result_queue, normalize_inputs=False,
-                              model_path=None):
+                              model_path=None, target_mode="signed_shortfall"):
     """Worker function for GP training in a separate process.
 
-    B-fix: pickle the trained `(scaler, gpr)` tuple to `model_path` on disk
-    and put ONLY the path string on `result_queue`. The path is short (~80
-    bytes) so it fits in any pipe buffer — this fixes the deadlock where
-    pickled models > Linux's pipe buffer (~64KB) caused mp.Queue's feeder
-    thread to block the subprocess from exiting (observed in run 3a at
-    t=102 with N=91 → 75627 bytes pickle).
+    B-fix: pickle (scaler, model, target_mode) 3-tuple to disk; queue payload
+    is just the path. S1.15: target_mode tagging prevents async-race confusion
+    when controller swaps modes mid-flight.
 
-    If `normalize_inputs=True` (mock GP-R1 fix), fit a StandardScaler on X
-    and pickle (scaler, gpr); otherwise pickle (None, gpr).
+    target_mode="risk_violation" → GaussianProcessClassifier (Bernoulli).
+    Other modes → GaussianProcessRegressor (legacy continuous target).
     """
     import os as _os
     pid = _os.getpid()
     t0 = time.time()
-    print(f"[GP-WORKER] pid={pid} STARTED N={len(training_data)}", flush=True)
+    print(f"[GP-WORKER] pid={pid} STARTED N={len(training_data)} mode={target_mode}", flush=True)
     try:
         X = np.array([x for x, _ in training_data])
         y = np.array([y for _, y in training_data])
@@ -47,22 +45,26 @@ def _train_gp_worker_process(training_data, result_queue, normalize_inputs=False
         else:
             X_fit = X
 
-        # Create a new GP instance for training
-        kernel = Matern(length_scale=np.ones(5), nu=2.5) + \
-                WhiteKernel(noise_level=0.1)
-        new_gpr = GaussianProcessRegressor(kernel=kernel, normalize_y=True)
+        # Pick model class by mode
+        if target_mode == "risk_violation":
+            kernel = RBF(length_scale=np.ones(5))
+            new_model = GaussianProcessClassifier(kernel=kernel)
+        else:
+            kernel = Matern(length_scale=np.ones(5), nu=2.5) + \
+                    WhiteKernel(noise_level=0.1)
+            new_model = GaussianProcessRegressor(kernel=kernel, normalize_y=True)
 
-        # Train the model
         t_fit = time.time()
-        new_gpr.fit(X_fit, y)
+        new_model.fit(X_fit, y)
         print(f"[GP-WORKER] pid={pid} FIT_DONE in {time.time()-t_fit:.2f}s", flush=True)
 
-        # B-fix: write model to disk, pass path through queue
+        # S1.15: pickle 3-tuple with mode tag
         try:
             with open(model_path, "wb") as f:
-                pickle.dump((scaler, new_gpr), f, protocol=pickle.HIGHEST_PROTOCOL)
+                pickle.dump((scaler, new_model, target_mode), f,
+                            protocol=pickle.HIGHEST_PROTOCOL)
             size = _os.path.getsize(model_path)
-            print(f"[GP-WORKER] pid={pid} WROTE {size} bytes to {model_path}", flush=True)
+            print(f"[GP-WORKER] pid={pid} WROTE {size} bytes to {model_path} mode={target_mode}", flush=True)
         except Exception as e:
             print(f"[GP-WORKER] pid={pid} WRITE_FAIL: {e}", flush=True)
             result_queue.put(('error', f'Model write failed: {e}', 0))
@@ -107,11 +109,23 @@ class GPPPOController(PPOController):
                  gp_drift_threshold=1.5,          # z-score threshold for detecting drift in target buffer
                  gp_min_train_interval=10,        # min ticks between adaptive retrainings (anti-thrashing)
                  gp_eviction_keep=0,              # when drift fires, evict buffer to last K (0=disabled)
+                 gp_buffer_reset_at=None,         # H4 in-vitro: timestamp at which to hard-reset GP state (clears buffer, gpr, scaler, in-flight training, calibration, distrust). One-shot, idempotent. None = disabled (default).
                  # ---- aux PI configuration (forwarded to internal CTControllerScaleX) ----
                  pi_anti_windup=False, pi_e_clip=None,
                  pi_error_form="inverse", pi_rt_deadband_frac=0.0,
                  # ---- forwarded to PPOController parent (mock RL-R3 fix) ----
-                 deterministic_eval=False):
+                 deterministic_eval=False,
+                 # ---- Step 1 v3 NEW knobs (S1.12-S1.20) ----
+                 mu_estimate=None,         # S1.2: offline μ̂ from calibrate_mu (req/s/core)
+                 rho_target=0.7,           # S1.7: target utilization for M/M/c floor
+                 tau=0.20,                 # S1.7: VETO threshold on (risk + κ·σ)
+                 kappa=2.0,                # S1.7: uncertainty multiplier
+                 alpha_clamp=0.7,          # S1.4: CLAMP active when RT > α·SLA
+                 dwell_ticks_min=3,        # S1.18: lower bound on adaptive dwell
+                 dwell_ticks_max=30,       # S1.18: upper bound (anti-pathological)
+                 floor_method="utilization",  # S1.19: "utilization" | "erlangc"
+                 master_seed=None,         # S1.17: seed propagation to np/torch
+                 ):
         super().__init__(period, init_cores, min_cores=min_cores,
                         max_cores=max_cores, st=st, name=name,
                         train=train, burst_mode=burst_mode,
@@ -167,6 +181,41 @@ class GPPPOController(PPOController):
         # the GP only on the (last K) post-drift data. Addresses the "buffer
         # composition" bottleneck where stale samples dominate over fresh ones.
         self.gp_eviction_keep = int(gp_eviction_keep)
+
+        # Step 1 v3 NEW knobs (S1.12-S1.20) — captured for future stages.
+        self.mu_estimate = mu_estimate
+        self.rho_target = float(rho_target)
+        self.tau = float(tau)
+        self.kappa = float(kappa)
+        self.alpha_clamp = float(alpha_clamp)
+        self.dwell_ticks_min = int(dwell_ticks_min)
+        self.dwell_ticks_max = int(dwell_ticks_max)
+        self.floor_method = str(floor_method)
+        self.master_seed = master_seed
+        self._veto_dwell_remaining = 0  # S1.9/S1.18: hysteresis counter
+        self._last_branch = None        # S1.11: track for logging
+
+        # S1.17: master_seed propagation to numpy / torch / python random.
+        # On Linux EC2 / cloud this guarantees deterministic ablation runs.
+        if master_seed is not None:
+            import random as _py_random
+            np.random.seed(int(master_seed))
+            try:
+                torch.manual_seed(int(master_seed))
+            except Exception:
+                pass
+            _py_random.seed(int(master_seed))
+
+        # S1.11: persist log_dir for jsonl envelope output
+        self.log_dir = log_dir
+
+        # H4 in-vitro knob: one-shot hard reset of GP state at a known drift timestamp.
+        # Used to validate the buffer-mix-toxicity hypothesis without an online drift
+        # detector. None disables the feature (regression-safe default).
+        self.gp_buffer_reset_at = (float(gp_buffer_reset_at)
+                                   if gp_buffer_reset_at is not None else None)
+        self._buffer_reset_done = False
+        self._skip_next_buffer_write = False
 
         # ST auto-tuning parameters
         self.st_max = st_max
@@ -258,7 +307,8 @@ class GPPPOController(PPOController):
             try:
                 _train_gp_worker_process(training_data, self.gp_training_result_queue,
                                           self.gp_normalize_inputs,
-                                          self._pending_model_path)
+                                          self._pending_model_path,
+                                          self.gp_target_mode)
             finally:
                 self.gp_train_counter = 0
             return
@@ -269,7 +319,8 @@ class GPPPOController(PPOController):
         self.gp_training_process = mp.Process(
             target=_train_gp_worker_process,
             args=(training_data, self.gp_training_result_queue,
-                  self.gp_normalize_inputs, self._pending_model_path)
+                  self.gp_normalize_inputs, self._pending_model_path,
+                  self.gp_target_mode)
         )
         self.gp_training_process.daemon = True  # Ensure process is terminated when main process exits
         self.gp_training_process.start()
@@ -321,8 +372,10 @@ class GPPPOController(PPOController):
             print(f"[GP-CHECK] elapsed={elapsed:.1f}s alive={alive} pid={pid} exit={exitcode} qsize={qsize}", flush=True)
 
         # A-fix: try to drain the queue regardless of subprocess liveness.
+        # Use a small grace timeout (50ms) instead of get_nowait to absorb the
+        # mp.Queue feeder-thread race window (put may not have propagated yet).
         try:
-            result = self.gp_training_result_queue.get_nowait()
+            result = self.gp_training_result_queue.get(block=True, timeout=0.05)
         except _QueueEmpty:
             # No result yet. If the subprocess has died WITHOUT producing
             # one, it crashed before put — clean up. Otherwise wait for
@@ -339,20 +392,32 @@ class GPPPOController(PPOController):
         status, payload_data, num_samples = result
         if status == 'success':
             # B-fix: payload_data is a path on disk, not bytes.
+            # S1.15: payload may be a 3-tuple (scaler, model, mode_tag) — verify match.
             try:
                 with open(payload_data, "rb") as f:
                     payload = pickle.load(f)
-                if isinstance(payload, tuple) and len(payload) == 2:
+                model_mode = None
+                if isinstance(payload, tuple) and len(payload) == 3:
+                    new_scaler, new_gpr, model_mode = payload
+                elif isinstance(payload, tuple) and len(payload) == 2:
                     new_scaler, new_gpr = payload
                 else:
                     new_scaler, new_gpr = None, payload
-                self.gpr = new_gpr
-                self._x_scaler = new_scaler
-                training_time = time.time() - self.gp_training_start_time
-                print(f"Async GP training completed with {num_samples} samples in {training_time:.2f}s")
-                if self.enable_log:
-                    with open(self.gp_log_path, "a") as f:
-                        f.write(f"Async GP trained with {num_samples} samples\n")
+
+                # S1.15 mode-tag check: reject if the trained model targets a
+                # different gp_target_mode (async race during mode swap).
+                if model_mode is not None and model_mode != self.gp_target_mode:
+                    print(f"[GP-MODE-MISMATCH] expected {self.gp_target_mode} "
+                          f"got {model_mode} — discarding model", flush=True)
+                else:
+                    self.gpr = new_gpr
+                    self._x_scaler = new_scaler
+                    training_time = (time.time() - self.gp_training_start_time
+                                     if self.gp_training_start_time else 0.0)
+                    print(f"Async GP training completed with {num_samples} samples in {training_time:.2f}s")
+                    if self.enable_log:
+                        with open(self.gp_log_path, "a") as f:
+                            f.write(f"Async GP trained with {num_samples} samples\n")
             except Exception as e:
                 print(f"GP model load failed: {e}")
         else:
@@ -507,6 +572,173 @@ class GPPPOController(PPOController):
         # default: "pi_compensation" — already signed by PI's bidirectional nature
         return pi_compensation
 
+    # -------------------------------------------------------------------
+    # Step 1 v3 helpers (S1.5, S1.7, S1.10/recovery, S1.16)
+    # -------------------------------------------------------------------
+
+    def _compute_mmc_baseline(self, lambda_hat, mu_hat):
+        """S1.7: M/M/c utilization-based safety floor.
+
+        c_baseline = ⌈λ̂ / (μ̂ · ρ_target)⌉ clamped to [min_cores, max_cores].
+        """
+        if mu_hat is None or mu_hat <= 0 or self.rho_target <= 0:
+            return int(self.min_cores)
+        from math import ceil
+        c = ceil(float(lambda_hat) / (float(mu_hat) * float(self.rho_target)))
+        return int(max(self.min_cores, min(self.max_cores, c)))
+
+    def _compute_sigma_entropy(self, p):
+        """S1.16: predictive entropy of a Bernoulli posterior P(y=1)=p.
+
+        H(p) = -p·log₂(p) - (1-p)·log₂(1-p) ∈ [0, 1] bits.
+        H(0) = H(1) = 0 (certain). H(0.5) = 1 (uniform).
+        """
+        from math import log2
+        eps = 1e-12
+        p = float(p)
+        if p <= eps or p >= 1.0 - eps:
+            return 0.0
+        return float(-(p * log2(p) + (1.0 - p) * log2(1.0 - p)))
+
+    def _build_risk_input(self, users, rt, sin_t, cos_t, cores_proposed):
+        """S1.5: GP classifier input vector for `risk_violation` mode.
+
+        Schema: (users, rt, sin_t, cos_t, cores_proposed) — 5 dims.
+        Crucially does NOT include `prev_action_ppo` (kills A1 policy-coupling).
+        """
+        return np.array([float(users), float(rt), float(sin_t),
+                         float(cos_t), float(cores_proposed)])
+
+    def _can_retrust_gp(self, fresh_window=20, brier_threshold=0.15):
+        """T10: re-trust gate after distrust.
+
+        Returns True only when:
+        (a) buffer has ≥ `fresh_window` samples, AND
+        (b) Brier score on the most recent `fresh_window` samples < threshold.
+
+        Until both conditions hold, the controller must keep the GP distrusted
+        — closes the A4 single-tick re-trust hole under `risk_violation` mode.
+        """
+        if len(self.gp_data_buffer) < int(fresh_window):
+            return False
+        if self.gpr is None:
+            return False
+        recent = list(self.gp_data_buffer)[-int(fresh_window):]
+        try:
+            X = np.array([s for s, _ in recent])
+            y = np.array([float(yi) for _, yi in recent])
+            X_in = self._x_scaler.transform(X) if self._x_scaler is not None else X
+            # Try classifier API first, fall back to regressor
+            if hasattr(self.gpr, "predict_proba"):
+                p_pred = self.gpr.predict_proba(X_in)[:, 1]
+            else:
+                p_pred = self.gpr.predict(X_in)
+            brier = float(np.mean((p_pred - y) ** 2))
+        except Exception:
+            return False
+        return brier < float(brier_threshold)
+
+    def _predict_risk_p_and_sigma(self, X):
+        """S1.16/S1.7: extract (P(violation|s,a), σ_entropy) from GP classifier.
+
+        sklearn GaussianProcessClassifier exposes predict_proba; σ is operationally
+        defined as predictive entropy (binary, in [0, 1] bits). Falls back gracefully
+        if the model is a regressor (legacy mode coexistence).
+        """
+        if self.gpr is None:
+            return 0.0, 1.0  # max uncertainty when no model
+        try:
+            X_in = self._x_scaler.transform(X) if self._x_scaler is not None else X
+            if hasattr(self.gpr, "predict_proba"):
+                p = float(self.gpr.predict_proba(X_in)[0, 1])
+            else:
+                # Legacy regressor: clip prediction to [0,1] as a degenerate proxy
+                p = float(np.clip(self.gpr.predict(X_in)[0], 0.0, 1.0))
+        except Exception as e:
+            print(f"[RISK-PRED] failed: {e}", flush=True)
+            return 0.0, 1.0
+        sigma = self._compute_sigma_entropy(p)
+        return p, sigma
+
+    def _get_gp_risk_prediction(self, X):
+        """S1.7: signed core adjustment derived from GP classifier risk.
+
+        Default: comp = (p - 0.5) · gain. p > 0.5 → comp > 0 (scale up under
+        elevated risk); p < 0.5 → comp < 0 (room to scale down).
+        """
+        p, _sigma = self._predict_risk_p_and_sigma(X)
+        gain = 4.0  # tunable in Step 2 alongside conformal calibration
+        return float((p - 0.5) * gain)
+
+    def _compute_tau_hat(self, current_rt, lambda_hat, mu_hat, cores):
+        """S1.18: estimate plant time-constant τ̂ ≈ E[RT] / max(ε, 1−ρ̂).
+        Used to scale the adaptive VETO dwell window.
+        """
+        cores = max(1.0, float(cores))
+        mu_hat = max(1e-3, float(mu_hat) if mu_hat else 1e-3)
+        rho = min(0.999, float(lambda_hat) / (cores * mu_hat))
+        return float(current_rt) / max(1e-3, 1.0 - rho)
+
+    def _apply_risk_violation_decision_tree(self, ppo_cores, current_rt,
+                                            sin_t, cos_t, lambda_hat, mu_hat):
+        """S1.7: VETO > CLAMP > COMPOSE decision tree.
+
+        Returns (final_cores, branch, comp, risk_p, sigma_entropy, c_baseline).
+        """
+        c_baseline = self._compute_mmc_baseline(lambda_hat, mu_hat)
+        sla = self.sla if self.sla else 0.25
+
+        # Build input vector for the GP classifier (5-dim, no prev_action_ppo).
+        X = self._build_risk_input(
+            users=self.prev_users, rt=self.prev_rt,
+            sin_t=sin_t, cos_t=cos_t,
+            cores_proposed=float(ppo_cores),
+        ).reshape(1, -1)
+
+        # Risk prediction + uncertainty (from GP classifier)
+        risk_p, sigma = self._predict_risk_p_and_sigma(X)
+        comp = self._get_gp_risk_prediction(X)
+
+        # Decision tree
+        veto_score = risk_p + self.kappa * sigma
+        veto_eligible = (veto_score > self.tau)
+        in_dwell = (self._veto_dwell_remaining > 0)
+
+        if veto_eligible or in_dwell:
+            branch = "VETO"
+            final = max(c_baseline, ppo_cores)
+            if veto_eligible:
+                # Set adaptive dwell on (re-)trigger
+                tau_hat = self._compute_tau_hat(
+                    max(current_rt, 1e-3), lambda_hat, mu_hat, ppo_cores)
+                dwell = int(max(self.dwell_ticks_min,
+                                min(self.dwell_ticks_max,
+                                    np.ceil(3 * tau_hat / max(self.period, 1e-3)))))
+                self._veto_dwell_remaining = max(self._veto_dwell_remaining, dwell)
+            else:
+                self._veto_dwell_remaining -= 1
+        elif current_rt > self.alpha_clamp * sla and comp < 0:
+            branch = "CLAMP"
+            final = float(ppo_cores)  # negative comp suppressed
+            comp = 0.0
+        else:
+            branch = "COMPOSE"
+            final = max(c_baseline, ppo_cores + comp)
+
+        # Final safety clip to [min_cores, max_cores]
+        final = float(max(self.min_cores, min(self.max_cores, final)))
+        return final, branch, comp, risk_p, sigma, c_baseline
+
+    def _write_envelope_jsonl(self, record):
+        """S1.11: append one tick record to envelope-{ts}.jsonl."""
+        if not getattr(self, "_envelope_jsonl_path", None):
+            return
+        try:
+            with open(self._envelope_jsonl_path, "a") as fh:
+                fh.write(json.dumps(record) + "\n")
+        except Exception as e:
+            print(f"[ENVELOPE-LOG] write failed: {e}", flush=True)
+
     def _apply_guardrail(self, ppo_cores, actual_compensation):
         """Combine PPO's choice with the guardrail compensation.
 
@@ -532,14 +764,161 @@ class GPPPOController(PPOController):
         """
         return self.gp_lookahead_horizon > 0 and self.gp_target_mode == "sla_shortfall"
 
+    def _maybe_reset_gp_state(self, t):
+        """H4 in-vitro: hard reset GP state when t first reaches gp_buffer_reset_at.
+
+        Wipes only GP-owned state (buffer, model, scalers, calibration, distrust,
+        async training process). PPO net, aux PI controller, and prev_* are left
+        intact — the contaminated first post-reset sample is handled via the
+        `_skip_next_buffer_write` flag instead.
+
+        Idempotent: only fires once, controlled by `_buffer_reset_done`.
+        """
+        if (self.gp_buffer_reset_at is None
+                or self._buffer_reset_done
+                or t < self.gp_buffer_reset_at):
+            return
+
+        # Terminate any in-flight async training and clean up the on-disk pickle.
+        if self.gp_training_process is not None and self.gp_training_process.is_alive():
+            self._terminate_training_process()
+        else:
+            self._cleanup_pending_model_path()
+            if self.gp_training_in_progress:
+                self._reset_training_state(reason="GP buffer drift-reset")
+
+        # Clear training data + lookahead pending buffer.
+        self.gp_data_buffer.clear()
+        self._gp_pending.clear()
+        self.gp_train_counter = 0
+
+        # Invalidate the fitted model + scaler so the predict path falls through
+        # to PI/PPO until the next retrain on a clean post-drift buffer.
+        self.gpr = None
+        self._x_scaler = None
+
+        # Reset trust + calibration state (they were measured under the prior regime).
+        self.gp_performance_errors.clear()
+        self._gp_residual_z2.clear()
+        self._last_gp_mean = None
+        self._last_gp_std = None
+        self.is_gp_trusted = True
+        self._distrust_remaining = 0
+
+        # Skip the very next buffer write — its input came from the pre-drift tick.
+        self._skip_next_buffer_write = True
+        self._buffer_reset_done = True
+
+        print(f"[GP-RESET] hard reset at t={t:.1f} (gp_buffer_reset_at={self.gp_buffer_reset_at:.1f})", flush=True)
+
+    def _control_risk_violation(self, t, ppo_cores, current_rt, num_users):
+        """Step 1 v3 risk_violation control flow.
+
+        Skips the legacy PI-compensation + signed-shortfall pipeline. Uses the
+        GP classifier's risk_p + sigma_entropy to drive a VETO/CLAMP/COMPOSE
+        decision tree. Bumpless transfer (S1.12): aux_pi_controller is NOT
+        called here — its xc_prec is preserved across branch switches.
+        """
+        sin_t = np.sin(2 * np.pi * t / self.gp_time_period)
+        cos_t = np.cos(2 * np.pi * t / self.gp_time_period)
+        lambda_hat = (self.monitoring.getThroughput()
+                      if hasattr(self.monitoring, "getThroughput") else 0.0)
+        mu_hat = self.mu_estimate if self.mu_estimate else 1.0
+
+        # Buffer write: target binary y = 1 if RT > SLA.
+        if t >= self.pi_start_time and self.step_cnt >= self.gp_train_start \
+                and hasattr(self, 'prev_action_ppo'):
+            if self._skip_next_buffer_write:
+                self._skip_next_buffer_write = False
+            else:
+                gp_input = self._build_risk_input(
+                    users=self.prev_users, rt=self.prev_rt,
+                    sin_t=sin_t, cos_t=cos_t,
+                    cores_proposed=float(ppo_cores))
+                y_label = 1 if current_rt > self.sla else 0
+                self.gp_data_buffer.append((gp_input, y_label))
+
+        # Trust gate (with re-trust evidence requirement, T10).
+        is_gp_trained = (len(self.gp_data_buffer) >= self.gp_min_samples
+                         and self.gpr is not None)
+        if not self.is_gp_trusted and is_gp_trained and self._distrust_remaining <= 0:
+            if self._can_retrust_gp():
+                self.is_gp_trusted = True
+                print(f"[GP-RETRUST] evidence-gated re-trust at t={t:.1f}", flush=True)
+
+        if is_gp_trained and self.is_gp_trusted:
+            final, branch, comp, risk_p, sigma, c_baseline = \
+                self._apply_risk_violation_decision_tree(
+                    ppo_cores, current_rt, sin_t, cos_t, lambda_hat, mu_hat)
+        else:
+            # Safe fallback: max-floor (no GP) → never below the M/M/c baseline.
+            c_baseline = self._compute_mmc_baseline(lambda_hat, mu_hat)
+            final = float(max(self.min_cores, min(self.max_cores,
+                                                  max(c_baseline, ppo_cores))))
+            branch = "None"
+            comp = 0.0
+            risk_p = 0.0
+            sigma = 1.0
+
+        self.cores = final
+        self._last_branch = branch
+
+        # JSONL telemetry (S1.11): one record per tick.
+        if self.enable_log:
+            if not getattr(self, "_envelope_jsonl_path", None):
+                self._envelope_jsonl_path = os.path.join(
+                    self.log_dir, f"envelope-{int(time.time())}.jsonl")
+            record = {
+                "t": float(t),
+                "risk": float(risk_p),
+                "sigma": float(sigma),
+                "tau": float(self.tau),
+                "kappa": float(self.kappa),
+                "alpha": float(self.alpha_clamp),
+                "branch": branch,
+                "y_observed": int(current_rt > self.sla),
+                "c_baseline": int(c_baseline),
+                "ppo_cores": float(ppo_cores),
+                "comp_gp": float(comp),
+                "final_cores": float(final),
+                "users": float(num_users),
+                "rt": float(current_rt),
+                "lambda_hat": float(lambda_hat),
+                "mu_hat_offline": float(mu_hat),
+                "master_seed": self.master_seed,
+            }
+            self._write_envelope_jsonl(record)
+
+        # Update previous-step trackers (mirror legacy path).
+        if hasattr(self, 'prev_act') and self.prev_act is not None:
+            self.prev_action_ppo = int(self.actions[self.prev_act])
+        else:
+            self.prev_action_ppo = 0
+        self.prev_users = num_users
+        self.prev_rt = current_rt
+
+        # Trigger retraining if counter exceeded.
+        self.gp_train_counter += 1
+        if self.gp_train_counter >= self.gp_train_freq:
+            self._train_gp()
+        self._check_training_result()
+
     def control(self, t):
+        # H4 in-vitro: one-shot hard reset of GP state at a known drift timestamp.
+        self._maybe_reset_gp_state(t)
         # Chiama il controllo base del PPO controller
         super().control(t)
         ppo_cores = self.cores # This is the decision from the PPO controller
-        
+
         # Get current metrics dopo che il PPO ha aggiornato i core
         current_rt = self.monitoring.getRT()
         num_users = self.monitoring.getUsers()
+
+        # ---- Step 1 v3: risk_violation mode dispatch (S1.7 decision tree) ----
+        if self.gp_target_mode == "risk_violation":
+            self._control_risk_violation(t, ppo_cores, current_rt, num_users)
+            return
+
         
         # Calculate error based on previous state (that caused the PPO action)
         setpoint = self.setpoint[0] if isinstance(self.setpoint, list) else self.setpoint
@@ -590,52 +969,63 @@ class GPPPOController(PPOController):
         if t >= self.pi_start_time:
             # Store data for GP training using PREVIOUS step values (cause-effect relationship)
             if hasattr(self, 'prev_action_ppo') and self.step_cnt >= self.gp_train_start:
-                gp_input = np.array([self.prev_action_ppo, self.prev_users, self.prev_rt, sin_t, cos_t])
-
-                if self._uses_lookahead_path():
-                    # Knob H: pending-buffer logic. Append now, observe rt[t..t+H], commit later.
-                    # Currently only enabled for legacy `sla_shortfall` mode (max-RT semantics).
-                    self._gp_pending.append({"input": gp_input,
-                                              "ppo_cores": ppo_cores,
-                                              "rts": []})
-                    # Each in-flight pending entry observes this tick's RT.
-                    for entry in self._gp_pending:
-                        entry["rts"].append(current_rt)
-                    # Commit entries that have collected H+1 observations (worst-case lookahead).
-                    while self._gp_pending and len(self._gp_pending[0]["rts"]) >= self.gp_lookahead_horizon + 1:
-                        done = self._gp_pending.popleft()
-                        worst_rt = max(done["rts"])
-                        if worst_rt > self.sla and self.sla > 0:
-                            t_target = done["ppo_cores"] * (worst_rt - self.sla) / self.sla
-                        else:
-                            t_target = 0.0
-                        self.gp_data_buffer.append((done["input"], t_target))
+                if self._skip_next_buffer_write:
+                    # H4 in-vitro: first sample after drift-reset has pre-drift input
+                    # (prev_*) paired with post-drift target → contaminated, skip it.
+                    self._skip_next_buffer_write = False
                 else:
-                    # Immediate (H=0) target via shared helper. Handles all three
-                    # gp_target_mode variants including B1 signed_shortfall.
-                    gp_target = self._compute_gp_target(ppo_cores, current_rt, pi_compensation)
-                    self.gp_data_buffer.append((gp_input, gp_target))
+                    gp_input = np.array([self.prev_action_ppo, self.prev_users, self.prev_rt, sin_t, cos_t])
 
-                # Mock SAFE-R3: track GP posterior calibration vs observed targets.
-                # If too many residuals fall outside the predicted ±2σ band, the GP
-                # is mis-calibrated → distrust until a fresh training cycle.
-                if (self.gp_trust_mode == "calibration"
-                    and self._last_gp_mean is not None
-                    and self._last_gp_std is not None
-                    and self.is_gp_trusted):
-                    z = (gp_target - self._last_gp_mean) / max(self._last_gp_std, 1e-3)
-                    self._gp_residual_z2.append(z * z)
-                    if len(self._gp_residual_z2) == self._gp_residual_z2.maxlen:
-                        miscal_frac = sum(1 for z2 in self._gp_residual_z2 if z2 > 4.0) \
-                                      / len(self._gp_residual_z2)
-                        if miscal_frac > self.gp_miscalibration_thresh:
-                            self.is_gp_trusted = False
-                            self._distrust_remaining = self.gp_distrust_dwell
-                            self._gp_residual_z2.clear()
-                            print(f"[SAFE-R3] GP miscalibrated "
-                                  f"(frac |z|>2: {miscal_frac:.2f}). Distrust dwell={self._distrust_remaining}.")
+                    if self._uses_lookahead_path():
+                        # Knob H: pending-buffer logic. Append now, observe rt[t..t+H], commit later.
+                        # Currently only enabled for legacy `sla_shortfall` mode (max-RT semantics).
+                        self._gp_pending.append({"input": gp_input,
+                                                  "ppo_cores": ppo_cores,
+                                                  "rts": []})
+                        # Each in-flight pending entry observes this tick's RT.
+                        for entry in self._gp_pending:
+                            entry["rts"].append(current_rt)
+                        # Commit entries that have collected H+1 observations (worst-case lookahead).
+                        while self._gp_pending and len(self._gp_pending[0]["rts"]) >= self.gp_lookahead_horizon + 1:
+                            done = self._gp_pending.popleft()
+                            worst_rt = max(done["rts"])
+                            if worst_rt > self.sla and self.sla > 0:
+                                t_target = done["ppo_cores"] * (worst_rt - self.sla) / self.sla
+                            else:
+                                t_target = 0.0
+                            self.gp_data_buffer.append((done["input"], t_target))
+                    else:
+                        # Immediate (H=0) target via shared helper. Handles all three
+                        # gp_target_mode variants including B1 signed_shortfall.
+                        gp_target = self._compute_gp_target(ppo_cores, current_rt, pi_compensation)
+                        self.gp_data_buffer.append((gp_input, gp_target))
 
-            is_gp_trained = len(self.gp_data_buffer) >= self.gp_min_samples
+                    # Mock SAFE-R3: track GP posterior calibration vs observed targets.
+                    # If too many residuals fall outside the predicted ±2σ band, the GP
+                    # is mis-calibrated → distrust until a fresh training cycle.
+                    if (self.gp_trust_mode == "calibration"
+                        and self._last_gp_mean is not None
+                        and self._last_gp_std is not None
+                        and self.is_gp_trusted):
+                        z = (gp_target - self._last_gp_mean) / max(self._last_gp_std, 1e-3)
+                        self._gp_residual_z2.append(z * z)
+                        if len(self._gp_residual_z2) == self._gp_residual_z2.maxlen:
+                            miscal_frac = sum(1 for z2 in self._gp_residual_z2 if z2 > 4.0) \
+                                          / len(self._gp_residual_z2)
+                            if miscal_frac > self.gp_miscalibration_thresh:
+                                self.is_gp_trusted = False
+                                self._distrust_remaining = self.gp_distrust_dwell
+                                self._gp_residual_z2.clear()
+                                print(f"[SAFE-R3] GP miscalibrated "
+                                      f"(frac |z|>2: {miscal_frac:.2f}). Distrust dwell={self._distrust_remaining}.")
+
+            # Bug #6: a populated buffer is not enough — the fitted GP must also exist.
+            # After [GP-RESET], `self.gpr=None` until the first post-reset retrain
+            # completes; without this guard `_get_gp_prediction` would call
+            # `self.gpr.predict(...)` on None, raise AttributeError, swallow it, and
+            # silently return 0.0 while logging "(GP)" misleadingly.
+            is_gp_trained = (len(self.gp_data_buffer) >= self.gp_min_samples
+                             and self.gpr is not None)
 
             # Phase 2: Use GP if trained and trusted
             if is_gp_trained and self.is_gp_trusted:
@@ -667,18 +1057,37 @@ class GPPPOController(PPOController):
                             with open(self.log_path, "a") as f:
                                 f.write(f"EVENT @{t:.1f}s: {log_msg}\n")
                         
-                        # Fallback to PI compensation for this step, recalculating with current metrics
-                        self.aux_pi_controller.cores = ppo_cores
-                        self.aux_pi_controller.setMonitoring(MockMonitoring(current_rt)) # Use fresh RT
-                        self.aux_pi_controller.control(t)
-                        pi_compensation = self.aux_pi_controller.cores - ppo_cores
-                        actual_compensation = pi_compensation
-                        compensation_source = "PI"
+                        # F4-b: in `signed_shortfall` mode, the PI is muted by design
+                        # (config has bc=dc=0). With BC=DC=0 the PI integral is stuck
+                        # at xc_prec=1 → ideal_cores=1 always → comp = 1 - ppo_cores
+                        # (negative spurious). Falling back to PI here therefore drives
+                        # cores toward the trivial fixed point. Bypass the PI: leave
+                        # PPO alone for this tick.
+                        if self.gp_target_mode == "signed_shortfall":
+                            actual_compensation = 0.0
+                            compensation_source = "None"
+                        else:
+                            # Fallback to PI compensation for this step, recalculating with current metrics
+                            self.aux_pi_controller.cores = ppo_cores
+                            self.aux_pi_controller.setMonitoring(MockMonitoring(current_rt)) # Use fresh RT
+                            self.aux_pi_controller.control(t)
+                            pi_compensation = self.aux_pi_controller.cores - ppo_cores
+                            actual_compensation = pi_compensation
+                            compensation_source = "PI"
 
             # Phase 1: Use direct PID before GP is ready or if it's untrusted
             else:
-                actual_compensation = pi_compensation
-                compensation_source = "PI"
+                # F4-b: same reasoning as the distrust path above. In signed_shortfall
+                # mode the PI is muted; routing the fallback through it would force
+                # cores to 1 (= xc_prec stuck) for the entire warm-up window after
+                # [GP-RESET] (~30 ticks until buffer reaches gp_min_samples and the
+                # first retrain finishes). Leave PPO alone instead.
+                if self.gp_target_mode == "signed_shortfall":
+                    actual_compensation = 0.0
+                    compensation_source = "None"
+                else:
+                    actual_compensation = pi_compensation
+                    compensation_source = "PI"
                 # If GP was untrusted, check if it has been retrained and can be trusted again.
                 # Mock SAFE-R1: respect dwell-time before re-trusting (prevents B2 single-tick bug).
                 if not self.is_gp_trusted and is_gp_trained:

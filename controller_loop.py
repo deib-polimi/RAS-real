@@ -3,11 +3,23 @@ from locust.runners import WorkerRunner
 import gevent
 from time import sleep
 import docker
+import os as _os
 from math import floor, ceil
 
 CPU_PERIOD = 100000
 QUOTA_FLOOR_US = 1000   # Docker rejects cpu_quota < 1000us (CFS minimum)
 cpu_range_start = None
+
+# Docker socket auto-detect for environments where the standard
+# /var/run/docker.sock symlink is missing (notably macOS Docker Desktop,
+# which keeps the socket under ~/.docker/run/). On Linux/AWS the env var
+# is typically already set or the standard path exists → this is a no-op.
+if not _os.environ.get("DOCKER_HOST"):
+    for _sock in [_os.path.expanduser("~/.docker/run/docker.sock"),
+                  "/var/run/docker.sock"]:
+        if _os.path.exists(_sock):
+            _os.environ["DOCKER_HOST"] = f"unix://{_sock}"
+            break
 
 client = docker.from_env()
 
