@@ -1,0 +1,57 @@
+{
+  "args": {
+    "hosts": [
+      "http://localhost:8080",
+      "http://localhost:8081"
+    ],
+    "path": "/function/graph_mst",
+    "container": "graph_set",
+    "quota_container": "graph_quota",
+    "cpu_range_start": 0,
+    "cores": [
+      2.0,
+      4.0,
+      8.0,
+      16.0
+    ],
+    "users": 22,
+    "duration": 60.0,
+    "warmup": 15.0,
+    "payload_size": 25000,
+    "app_sla": 0.25
+  },
+  "results": [
+    {
+      "c": 2.0,
+      "n": 1462,
+      "mean_rt": 0.9017972765151518,
+      "p95_rt": 1.1846316099166871,
+      "throughput_X": 24.366666666666667,
+      "mu_fit_per_core": 12.750391604690813
+    },
+    {
+      "c": 4.0,
+      "n": 3001,
+      "mean_rt": 0.4405997102159693,
+      "p95_rt": 0.5515091419219971,
+      "throughput_X": 50.016666666666666,
+      "mu_fit_per_core": 13.12021011602599
+    },
+    {
+      "c": 8.0,
+      "n": 6086,
+      "mean_rt": 0.21688563804895988,
+      "p95_rt": 0.2632182836532593,
+      "throughput_X": 101.43333333333334,
+      "mu_fit_per_core": 13.409073493517937
+    },
+    {
+      "c": 16.0,
+      "n": 11050,
+      "mean_rt": 0.11968107329234819,
+      "p95_rt": 0.13741463422775269,
+      "throughput_X": 184.16666666666666,
+      "mu_fit_per_core": 12.537542699724437
+    }
+  ]
+}
