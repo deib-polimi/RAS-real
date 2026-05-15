@@ -70,7 +70,7 @@ CONFIG = {
             # max_cores MUST be ≤ host's os.cpu_count() because controller_loop
             # pins the quota container to cpuset_cpus=<max_cores-1>.
             # Mac M1 has 8 cores → max_cores=8. On AWS bumps to 16.
-            "max_cores": 8,
+            "max_cores": 16,
             "st": 1.0,
             "container_ids": ["graph_set", "graph_quota"],
             "cpu_poll_interval": 2.0,
