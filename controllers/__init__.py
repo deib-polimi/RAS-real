@@ -10,3 +10,6 @@ from .controlqueuingrobust import OPTCTRLROBUST
 from .ppocontroller import PPOController
 from .rlcontroller import RLController
 from .gpppo_controller import GPPPOController
+from .mmc_pi_controller import MMCPIController
+from .handover_ppo_controller import HandoverPPOController
+from .calibrationcontroller import CalibrationController

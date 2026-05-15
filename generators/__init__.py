@@ -5,4 +5,6 @@ from .multigenerator import MultiGenerator
 from .twittergenerator import TweetGen
 from .wikigenerator import WikiGen
 from .stationarygenerator import StationaryGen
+from .distribution_gen import DistributionGen
+from .calibrationgen import CalibrationGen
 from .generator import Generator

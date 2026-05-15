@@ -145,11 +145,14 @@ def fit_mu_from_W(W_obs: float, lam: float, c: int,
 # ---------------------------------------------------------------------------
 
 def _worker_loop(hosts, path, payload, headers, p_set, stop_event,
-                 latencies, started_at, warmup_s, lock):
+                 latencies, started_at, warmup_s, lock, wait_time=0.0):
     """One pseudo-user: keep firing requests until stop_event is set.
 
     Routes to hosts[0] (set container) with probability p_set, otherwise to
     hosts[1] (quota container) — same rule as request_maker.run().
+
+    wait_time>0 inserts a think-time pause between requests, matching the
+    closed-loop Locust workload model (locustfiles use wait_time=1 by default).
     """
     import requests
     while not stop_event.is_set():
@@ -163,6 +166,8 @@ def _worker_loop(hosts, path, payload, headers, p_set, stop_event,
         if (t0 - started_at) >= warmup_s:
             with lock:
                 latencies.append(rt)
+        if wait_time > 0 and not stop_event.is_set():
+            time.sleep(wait_time)
 
 
 def _percentile(values, q: float) -> float:
@@ -200,7 +205,7 @@ def measure_at(c: float, args, client) -> dict:
         futures = [
             pool.submit(_worker_loop, args.hosts, args.path, payload, headers,
                         p_set, stop_event, latencies, started_at, args.warmup,
-                        lock)
+                        lock, args.wait_time)
             for _ in range(args.users)
         ]
         time.sleep(args.warmup + args.duration)
@@ -250,6 +255,10 @@ def main():
     p.add_argument("--app-sla", type=float, default=0.25,
                    help="SLA target — used to pick init_cores (the smallest "
                         "tested c that already keeps mean_RT below SLA).")
+    p.add_argument("--wait-time", type=float, default=0.0,
+                   help="Closed-loop think-time pause between requests (s). "
+                        "Set to match Locust wait_time so calibration matches "
+                        "the experiment's actual workload model.")
     args = p.parse_args()
 
     if len(args.hosts) < 2:

@@ -53,7 +53,8 @@ class PPOController(Controller):
                  burst_mode="none", burst_threshold_q=20, burst_threshold_r=30,
                  burst_extra=4, trend_features=False,
                  enable_log=True, log_dir="./logs",
-                 deterministic_eval=False):
+                 deterministic_eval=False,
+                 model_suffix=None, cost_coef=0.0):
         super().__init__(period=period, init_cores=init_cores, min_cores=min_cores, max_cores=max_cores, st=st, name=name)
         self.train = train
         self.burst_mode = burst_mode
@@ -64,11 +65,13 @@ class PPOController(Controller):
         self.enable_log = enable_log
         # Mock RL-R3 fix: when not training, use argmax(logits) instead of sampling
         self.deterministic_eval = deterministic_eval
+        self.cost_coef = float(cost_coef)
 
         os.makedirs(log_dir, exist_ok=True)
         ts = datetime.now().strftime("%Y%m%d-%H%M%S")
         self.log_path = os.path.join(log_dir, f"ppo-{burst_mode}-{ts}.log")
-        self.model_path = os.path.join("./controllers", f"ppocontroller-{burst_mode}.pt")
+        model_tag = f"{burst_mode}-{model_suffix}" if model_suffix else burst_mode
+        self.model_path = os.path.join("./controllers", f"ppocontroller-{model_tag}.pt")
 
         self.actions = np.arange(-2,3,1)
         obs_dim = 5 + (2 if trend_features else 0)
@@ -127,10 +130,20 @@ class PPOController(Controller):
         return st
 
     def _reward(self):
-        lat_ratio = self.monitoring.getRT() - self.setpoint
-        pen_lat = 0.6 * lat_ratio if lat_ratio > 0 else 0.4 * lat_ratio 
-        self.prev_reward = -abs(pen_lat) 
-        return -abs(pen_lat) 
+        # FIX A: reward uses p95 (not mean) for two reasons:
+        #   1. ALIGN with state: _state() already uses p95/setpoint as lat_ratio
+        #   2. DENSITY: p95 exceeds SLA much more often than mean (avoids the
+        #      reward sparsity that drove PPO to a cost-dominated optimum
+        #      = cores=min with high transient violations).
+        # Reward density rises ~3x, advantage normalization stabilizes,
+        # bias asymmetry should converge toward 0 (no more argmax=Δ=-2 trap).
+        lat_ratio = self.monitoring.getRTp95() - self.setpoint
+        pen_lat = max(0.0, lat_ratio)
+        cores_norm = (self.cores - self.min_cores) / max(1, (self.max_cores - self.min_cores))
+        cost = self.cost_coef * cores_norm
+        r = -pen_lat - cost
+        self.prev_reward = r
+        return r
 
     def _burst(self):
         return (self.prev_q is not None and (self.monitoring.getQueueLen()-self.prev_q)>self.burst_threshold_q) or \
