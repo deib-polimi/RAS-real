@@ -18,9 +18,11 @@ do
   git pull --rebase
   echo $CPUS
   echo $FILE
-  taskset -c $CPUS locust --headless -f $FILE
+  TS=$(date +%s)
+  RUN_TAG=$(basename "$FILE" .py)_${TS}
+  taskset -c $CPUS locust --headless -f $FILE --csv=logs/${RUN_TAG} 2>&1 | tee logs/${RUN_TAG}.log
   git add -A
-  git commit -am 'aws-exp'
+  git commit -am "aws-exp ${RUN_TAG}"
   git pull --rebase
   git push
   echo "waiting two mins"
