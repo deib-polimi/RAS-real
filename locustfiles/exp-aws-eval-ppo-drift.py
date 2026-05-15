@@ -39,8 +39,8 @@ CONFIG = {
     "generator": {
         "class": "SinGen",
         "params": {
-            "mod": 50,
-            "shift": 100,
+            "mod": 20,
+            "shift": 50,
             "period": 360,
         },
     },
@@ -49,7 +49,7 @@ CONFIG = {
         "class": "PPOController",
         "params": {
             "period": 1,
-            "init_cores": 8,
+            "init_cores": 4,
             "min_cores": 1,
             "max_cores": 16,
             "st": 1.0,
@@ -60,7 +60,7 @@ CONFIG = {
             "enable_log": True,
             "log_dir": "./logs",
             "model_suffix": "aws-1h",
-            "cost_coef": 0.02,
+            "cost_coef": 0.15,
         },
     },
 }

@@ -1,14 +1,18 @@
-"""PPO TRAINING — AWS 31-core box, 1h sprint.
+"""PPO TRAINING — AWS 31-core box, 3h.
 
 Calibrated 2026-05-15 (logs/calibration-20260515-092904.jsonl):
-  μ̂/core = 14.48 req/s (CV 3.4%, linear 2-8c)
-  Cap @16c pre-drift = 232 req/s; post-drift (noise=1.5) = 92.7 req/s
+  μ̂/core measured 15.18(c=2) → 14.10(c=8), asymptote ~14.0 at high c
+  Cap @16c pre-drift ≈ 216 req/s; post-drift (noise=1.5) ≈ 89.6 req/s
   Ceiling uwsgi = 16 cores (graph_set -p 15 + graph_quota -p 1)
 
-Training distribution: SinGen mid-range, ρ_pre ∈ [0.22, 0.65]
-  shift=100, mod=50, period=360s  →  lam ∈ [50, 150]
-  Pre-drift: forces real scaling decisions (1-2c at trough, ~10c at peak).
-  No drift here — keep training in-distribution clean.
+Training distribution: SinGen narrow (drift-recoverable at max cores)
+  shift=50, mod=20, period=360s  →  lam ∈ [30, 70]
+  Pre-drift ρ ∈ [0.13, 0.32]; post-drift ρ_peak ≈ 0.78 → clean recovery feasible.
+  Optimal cores: 3 (trough) → 6 (peak).
+
+cost_coef=0.15 (was 0.02): first value above the anti-ratchet breakeven (0.12).
+  At c=16 cost = 0.15; equivalent to ~150ms violation → PPO actively scales down
+  when cap is sufficient. Validated via codex cross-review.
 
 Output checkpoint: controllers/ppocontroller-none-aws-1h.pt
 """
@@ -29,7 +33,7 @@ CONFIG = {
     "wait_time_max": 1,
     "spawn_rate": 10,
 
-    "end": 3600,
+    "end": 10800,
 
     "noise_start": 99999,
     "noise_scale": 0.0,
@@ -42,8 +46,8 @@ CONFIG = {
     "generator": {
         "class": "SinGen",
         "params": {
-            "mod": 50,
-            "shift": 100,
+            "mod": 20,
+            "shift": 50,
             "period": 360,
         },
     },
@@ -52,7 +56,7 @@ CONFIG = {
         "class": "PPOController",
         "params": {
             "period": 1,
-            "init_cores": 8,
+            "init_cores": 4,
             "min_cores": 1,
             "max_cores": 16,
             "st": 1.0,
@@ -63,7 +67,7 @@ CONFIG = {
             "enable_log": True,
             "log_dir": "./logs",
             "model_suffix": "aws-1h",
-            "cost_coef": 0.02,
+            "cost_coef": 0.15,
         },
     },
 }
