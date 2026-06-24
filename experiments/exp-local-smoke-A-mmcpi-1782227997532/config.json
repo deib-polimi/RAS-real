@@ -1,0 +1,64 @@
+{
+    "hosts": [
+        "http://localhost:8080",
+        "http://localhost:8081"
+    ],
+    "containerIds": [
+        "graph_set",
+        "graph_quota"
+    ],
+    "request": {
+        "method": "POST",
+        "data": {
+            "size": 25000
+        },
+        "headers": {
+            "Content-Type": "application/json"
+        },
+        "path": "/"
+    },
+    "cpu_range_start": 0,
+    "monitoring_window": 30,
+    "app_sla": 0.25,
+    "wait_time_min": 1,
+    "wait_time_max": 1,
+    "spawn_rate": 1,
+    "noise_type": "avg",
+    "noise_scale": 0.8,
+    "seed": 42,
+    "generator": {
+        "class": "SinGen",
+        "params": {
+            "mod": 12.4,
+            "shift": 22.3,
+            "period": 360
+        }
+    },
+    "end": 600,
+    "noise_start": 300,
+    "noise_drift_kind": "step",
+    "noise_drift_end": 600,
+    "noise_drift_period": 600,
+    "controller": {
+        "class": "MMCPIController",
+        "params": {
+            "period": 1,
+            "init_cores": 4,
+            "min_cores": 1,
+            "max_cores": 8,
+            "st": 1.0,
+            "enable_log": true,
+            "log_dir": "./logs",
+            "target_frac": 0.8,
+            "mu_ewma_alpha": 0.1,
+            "kp": 8.0,
+            "ki": 2.0,
+            "anti_windup_max": 5.0,
+            "container_ids": [
+                "graph_set",
+                "graph_quota"
+            ],
+            "cpu_poll_interval": 2.0
+        }
+    }
+}

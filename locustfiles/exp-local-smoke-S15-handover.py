@@ -1,0 +1,7 @@
+"""B3 Handover (PPO + MMC-PI via FSM) · Scenario S15 (StationaryGen λ=18, step, N=1.5) — fast μ̂ (30s).
+Best of both: PPO efficiency in nominal + physics recovery under drift."""
+from base_experiment import *
+from smoke_common import make_config
+
+EXP_NAME = __file__.split("/")[-1].split(".")[0]
+setup(EXP_NAME, make_config("S15", "handover"))

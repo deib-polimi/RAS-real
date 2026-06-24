@@ -1,0 +1,83 @@
+{
+  "input": "logs/calibration-20260515-092904.jsonl",
+  "warmup_s": 30.0,
+  "noise_scale_target": 1.5,
+  "max_cores": 16,
+  "sla_min_ms": 150.0,
+  "per_cores": [
+    {
+      "cores_set": 2,
+      "N_measured": 590,
+      "duration_measured_s": 597.9,
+      "throughput_X": 16.794,
+      "u_cores_mean": 1.106,
+      "u_cores_std": 0.19,
+      "users_mean": 17.97,
+      "rt_mean_s": 0.0709,
+      "rt_p95_s": 0.0862,
+      "rt_p95_max_s": 0.1419,
+      "mu_per_core_utilization_law": 15.178,
+      "rho_estimated": 0.553
+    },
+    {
+      "cores_set": 4,
+      "N_measured": 591,
+      "duration_measured_s": 599.1,
+      "throughput_X": 33.435,
+      "u_cores_mean": 2.315,
+      "u_cores_std": 0.211,
+      "users_mean": 35.96,
+      "rt_mean_s": 0.0756,
+      "rt_p95_s": 0.1125,
+      "rt_p95_max_s": 0.1341,
+      "mu_per_core_utilization_law": 14.446,
+      "rho_estimated": 0.579
+    },
+    {
+      "cores_set": 6,
+      "N_measured": 590,
+      "duration_measured_s": 598.4,
+      "throughput_X": 50.12,
+      "u_cores_mean": 3.527,
+      "u_cores_std": 0.226,
+      "users_mean": 53.96,
+      "rt_mean_s": 0.0763,
+      "rt_p95_s": 0.0993,
+      "rt_p95_max_s": 0.1214,
+      "mu_per_core_utilization_law": 14.209,
+      "rho_estimated": 0.588
+    },
+    {
+      "cores_set": 8,
+      "N_measured": 590,
+      "duration_measured_s": 598.8,
+      "throughput_X": 66.789,
+      "u_cores_mean": 4.737,
+      "u_cores_std": 0.246,
+      "users_mean": 71.96,
+      "rt_mean_s": 0.0767,
+      "rt_p95_s": 0.0942,
+      "rt_p95_max_s": 0.1144,
+      "mu_per_core_utilization_law": 14.099,
+      "rho_estimated": 0.592
+    }
+  ],
+  "aggregated": {
+    "mu_per_core_avg": 14.483,
+    "mu_per_core_std": 0.485,
+    "mu_per_core_cv": 0.034,
+    "mu_post_drift_inferred": 5.793,
+    "noise_scale_assumed_for_post_drift": 1.5,
+    "max_cores_runtime": 16,
+    "capacity_pre_drift_req_s": 231.7,
+    "capacity_post_drift_req_s": 92.7,
+    "sla_floor_post_drift_s": 0.1726,
+    "sla_proposed_s": 0.259,
+    "sla_proposed_ms": 259.0,
+    "workload_lam_min": 18.5,
+    "workload_lam_max": 64.9,
+    "singen_shift": 41.7,
+    "singen_mod": 23.2,
+    "singen_period_s_recommended": 360
+  }
+}

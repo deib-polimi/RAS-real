@@ -1,0 +1,56 @@
+{
+    "hosts": [
+        "http://localhost:8080",
+        "http://localhost:8081"
+    ],
+    "containerIds": [
+        "graph_set",
+        "graph_quota"
+    ],
+    "request": {
+        "method": "POST",
+        "data": {
+            "size": 50000
+        },
+        "headers": {
+            "Content-Type": "application/json"
+        },
+        "path": "/"
+    },
+    "cpu_range_start": 0,
+    "monitoring_window": 30,
+    "app_sla": 0.25,
+    "wait_time_min": 1,
+    "wait_time_max": 1,
+    "spawn_rate": 1,
+    "end": 600,
+    "noise_start": 300,
+    "noise_scale": 1.5,
+    "noise_type": "avg",
+    "noise_drift_kind": "step",
+    "noise_drift_end": 600,
+    "noise_drift_period": 300,
+    "seed": 42,
+    "generator": {
+        "class": "StationaryGen",
+        "params": {
+            "lam": 60
+        }
+    },
+    "controller": {
+        "class": "PPOController",
+        "params": {
+            "period": 1,
+            "init_cores": 6,
+            "min_cores": 1,
+            "max_cores": 8,
+            "st": 1.0,
+            "train": false,
+            "deterministic_eval": true,
+            "burst_mode": "none",
+            "trend_features": false,
+            "enable_log": true,
+            "log_dir": "./logs"
+        }
+    }
+}

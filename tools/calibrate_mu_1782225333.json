@@ -1,0 +1,31 @@
+{
+  "args": {
+    "hosts": [
+      "http://localhost:8080",
+      "http://localhost:8081"
+    ],
+    "path": "/",
+    "container": "graph_set",
+    "quota_container": "graph_quota",
+    "cpu_range_start": 0,
+    "cores": [
+      4.0
+    ],
+    "users": 35,
+    "duration": 150.0,
+    "warmup": 25.0,
+    "payload_size": 25000,
+    "app_sla": 0.25,
+    "wait_time": 1.0
+  },
+  "results": [
+    {
+      "c": 4.0,
+      "n": 4790,
+      "mean_rt": 0.09431194617006625,
+      "p95_rt": 0.14369820356369017,
+      "throughput_X": 31.933333333333334,
+      "mu_fit_per_core": 12.825134823173283
+    }
+  ]
+}

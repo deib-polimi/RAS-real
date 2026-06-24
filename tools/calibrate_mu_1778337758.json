@@ -1,0 +1,57 @@
+{
+  "args": {
+    "hosts": [
+      "http://localhost:8080",
+      "http://localhost:8081"
+    ],
+    "path": "/",
+    "container": "graph_set",
+    "quota_container": "graph_quota",
+    "cpu_range_start": 0,
+    "cores": [
+      1.0,
+      2.0,
+      4.0,
+      8.0
+    ],
+    "users": 22,
+    "duration": 300.0,
+    "warmup": 15.0,
+    "payload_size": 25000,
+    "app_sla": 0.25
+  },
+  "results": [
+    {
+      "c": 1.0,
+      "n": 5029,
+      "mean_rt": 1.3121139099119576,
+      "p95_rt": 1.5703868389129634,
+      "throughput_X": 16.763333333333332,
+      "mu_fit_per_core": 17.52546277003014
+    },
+    {
+      "c": 2.0,
+      "n": 9872,
+      "mean_rt": 0.6683854037107873,
+      "p95_rt": 0.9451749920845031,
+      "throughput_X": 32.906666666666666,
+      "mu_fit_per_core": 17.218402531780306
+    },
+    {
+      "c": 4.0,
+      "n": 19833,
+      "mean_rt": 0.33281376236464694,
+      "p95_rt": 0.43895125389099116,
+      "throughput_X": 66.11,
+      "mu_fit_per_core": 17.34316237911582
+    },
+    {
+      "c": 8.0,
+      "n": 31059,
+      "mean_rt": 0.21248755128313246,
+      "p95_rt": 0.3232352018356322,
+      "throughput_X": 103.53,
+      "mu_fit_per_core": 13.686272067427637
+    }
+  ]
+}

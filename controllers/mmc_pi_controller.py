@@ -127,6 +127,46 @@ def compute_safe_cores(lam: float, mu_hat: float, rt_target: float,
 
 
 # =====================================================================
+#  Windowed Operational Utilization Law estimator
+# =====================================================================
+class MuEstimator:
+    """Per-core service-rate estimate via the Operational Utilization Law,
+    averaged over a sliding window:  μ̂ = Σ X / Σ U  over the last `window_s`.
+
+    The Utilization Law is an *operational* identity that holds over a
+    measurement interval with many completions — it is meaningless tick-by-tick.
+    Averaging X (throughput) and U (busy cores) over a window rejects the heavy
+    instantaneous noise of `docker stats` under emulation. Regression fix for
+    the c_phys 1↔8 oscillation observed in smoke A (23 giu 2026): the swings
+    came from μ̂ jumping 1.1↔24.3, not from the PI.
+    """
+    def __init__(self, window_s=120.0, min_samples=10, min_busy_core_s=1.0):
+        self.window_s = float(window_s)
+        self.min_samples = int(min_samples)
+        self.min_busy = float(min_busy_core_s)
+        self._buf = deque()   # (t, X, U)
+
+    def update(self, t, X, U):
+        if X is None or U is None or U <= 0:
+            return
+        self._buf.append((float(t), float(X), float(U)))
+        cutoff = float(t) - self.window_s
+        while self._buf and self._buf[0][0] < cutoff:
+            self._buf.popleft()
+
+    def estimate(self):
+        """Return μ̂ = ΣX/ΣU over the window, or None if data is insufficient
+        (window not warm enough to be statistically meaningful)."""
+        if len(self._buf) < self.min_samples:
+            return None
+        sumX = sum(x for _, x, _ in self._buf)
+        sumU = sum(u for _, _, u in self._buf)
+        if sumU < self.min_busy:
+            return None
+        return sumX / sumU
+
+
+# =====================================================================
 #  Controller
 # =====================================================================
 class MMCPIController(Controller):
@@ -136,8 +176,9 @@ class MMCPIController(Controller):
                  min_cores=1, max_cores=8, st=1.0, name=None,
                  # M/M/c floor
                  target_frac=0.80,
-                 # μ̂ smoothing
-                 mu_ewma_alpha=0.10,
+                 # μ̂ estimation (windowed Utilization Law)
+                 mu_window_s=120.0,
+                 mu_ewma_alpha=0.10,  # deprecated: kept for config compat (unused)
                  # PI feedback (add-only)
                  kp=8.0, ki=2.0, anti_windup_max=5.0,
                  # Docker CPU sampler
@@ -158,6 +199,7 @@ class MMCPIController(Controller):
 
         # state
         self.mu_hat = None
+        self.mu_est = MuEstimator(window_s=mu_window_s)
         self.pi_I = 0.0
         self._tick_count = 0
 
@@ -185,15 +227,16 @@ class MMCPIController(Controller):
         u_cores = (self.cpu_sampler.get_cores_used()
                      if self.cpu_sampler else 0.0)
 
-        # 2) Online μ̂ via Utilization Law
+        # 2) Online μ̂ via WINDOWED Utilization Law (μ̂ = ΣX/ΣU over window).
+        #    Rejects instantaneous docker-stats noise; only updates mu_hat once
+        #    the window is statistically warm.
         mu_raw = None
         if u_cores > 0.05 and lam > 0:
             mu_raw = lam / u_cores
-            if self.mu_hat is None:
-                self.mu_hat = mu_raw
-            else:
-                self.mu_hat = (self.mu_alpha * mu_raw
-                                + (1.0 - self.mu_alpha) * self.mu_hat)
+            self.mu_est.update(t, lam, u_cores)
+        new_mu = self.mu_est.estimate()
+        if new_mu is not None:
+            self.mu_hat = new_mu
 
         # 3) M/M/c safety floor (Erlang-C numerical search)
         rt_target = self.sla * self.target_frac

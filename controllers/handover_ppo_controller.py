@@ -23,7 +23,7 @@ import threading
 from datetime import datetime
 
 from .ppocontroller import PPOController
-from .mmc_pi_controller import (DockerCPUSampler, compute_safe_cores)
+from .mmc_pi_controller import (DockerCPUSampler, compute_safe_cores, MuEstimator)
 
 
 class HandoverPPOController(PPOController):
@@ -43,7 +43,8 @@ class HandoverPPOController(PPOController):
                  warmup_ticks=30,
                  # Safety (MMCPI) sub-controller params
                  target_frac=0.80,
-                 mu_ewma_alpha=0.10,
+                 mu_window_s=120.0,
+                 mu_ewma_alpha=0.10,  # deprecated: kept for config compat (unused)
                  kp=8.0, ki=2.0, anti_windup_max=5.0,
                  # CPU sampler
                  container_ids=None,
@@ -73,6 +74,7 @@ class HandoverPPOController(PPOController):
 
         # State
         self.mu_hat = None
+        self.mu_est = MuEstimator(window_s=mu_window_s)
         self.pi_I = 0.0
         self._tick = 0
         self._mode = self.PPO_MODE
@@ -101,13 +103,15 @@ class HandoverPPOController(PPOController):
         lam     = float(self.monitoring.getThroughput())
         u_cores = (self.cpu_sampler.get_cores_used() if self.cpu_sampler else 0.0)
 
-        # 2) Online μ̂ via Utilization Law — ALWAYS update (so safety is warm)
+        # 2) Online μ̂ via WINDOWED Utilization Law — ALWAYS update (safety warm).
+        #    μ̂ = ΣX/ΣU over window: rejects instantaneous docker-stats noise.
         mu_raw = None
         if u_cores > 0.05 and lam > 0:
             mu_raw = lam / u_cores
-            self.mu_hat = (mu_raw if self.mu_hat is None
-                            else self.mu_alpha * mu_raw
-                                 + (1.0 - self.mu_alpha) * self.mu_hat)
+            self.mu_est.update(t, lam, u_cores)
+        new_mu = self.mu_est.estimate()
+        if new_mu is not None:
+            self.mu_hat = new_mu
 
         # 3) FSM transition (warmup + hysteresis + dwell)
         tau_engage    = sla * self.tau_engage_mult

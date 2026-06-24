@@ -1,0 +1,49 @@
+{
+    "hosts": [
+        "http://localhost:8080",
+        "http://localhost:8081"
+    ],
+    "containerIds": [
+        "graph_set",
+        "graph_quota"
+    ],
+    "request": {
+        "method": "POST",
+        "data": {
+            "size": 80000
+        },
+        "headers": {
+            "Content-Type": "application/json"
+        },
+        "path": "/"
+    },
+    "cpu_range_start": 0,
+    "monitoring_window": 30,
+    "app_sla": 0.25,
+    "wait_time_min": 1,
+    "wait_time_max": 1,
+    "spawn_rate": 1,
+    "end": 600,
+    "noise_start": -1,
+    "noise_scale": 0,
+    "noise_type": "avg",
+    "noise_drift_kind": "step",
+    "noise_drift_end": 600,
+    "noise_drift_period": 600,
+    "seed": 42,
+    "generator": {
+        "class": "StationaryGen",
+        "params": {
+            "lam": 22
+        }
+    },
+    "controller": {
+        "class": "StaticController",
+        "params": {
+            "period": 1,
+            "init_cores": 8,
+            "min_cores": 8,
+            "max_cores": 8
+        }
+    }
+}
